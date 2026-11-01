@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import pypdfium2 as pdfium
+from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.accelerator_options import AcceleratorOptions
 from docling.datamodel.base_models import ConversionStatus, InputFormat
 from docling.datamodel.pipeline_options import OcrMode, PdfPipelineOptions, RapidOcrOptions
@@ -119,8 +120,17 @@ class DoclingParser:
             )
             if ocr:
                 options.ocr_options = RapidOcrOptions(lang=["iso:en"], mode=OcrMode.FULL_PAGE)
+            # The pdfium backend renders the page images the layout model looks at with pdfium's
+            # own bundled standard fonts. Docling's default backend (docling-parse) draws text
+            # with the system's fonts, and the slim Linux image has none: PDFs that don't embed
+            # Helvetica/Times (common) came out as boxes, and the layout model merged whole
+            # pages into one block. pdfium gives the same result on a Mac and in Docker.
             converter = DocumentConverter(
-                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(
+                        pipeline_options=options, backend=PyPdfiumDocumentBackend
+                    )
+                }
             )
             converter.initialize_pipeline(InputFormat.PDF)  # load the models now, not mid-task
             self._converters[ocr] = converter
