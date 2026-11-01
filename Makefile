@@ -1,4 +1,4 @@
-.PHONY: dev down install test lint format requirements eval
+.PHONY: dev down install test lint format requirements data data-cuad synthetic eval
 
 dev: ## Start the whole stack (db, redis, api, worker, frontend)
 	docker compose up --build
@@ -22,6 +22,15 @@ format: ## Auto-format backend code
 
 requirements: ## Regenerate requirements.txt from backend/uv.lock
 	uv export --project backend --frozen --no-hashes --no-emit-project --quiet -o requirements.txt
+
+data: ## Download and verify ContractNLI into data/ (skips what is already there)
+	uv run --project backend python scripts/download_data.py
+
+data-cuad: ## Same as data, plus the optional CUAD dataset (106 MB)
+	uv run --project backend python scripts/download_data.py --include-cuad
+
+synthetic: ## Generate 500 synthetic documents + manifest into data/synthetic/ (seed 42)
+	PYTHONPATH=backend uv run --project backend python -m scripts.generate_synthetic
 
 eval: ## Run the evaluation harness (Phase 7)
 	@echo "Evaluation harness not built yet (Phase 7)."
