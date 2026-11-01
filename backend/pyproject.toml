@@ -29,16 +29,16 @@ parse = [
 test = [
     "httpx>=0.28.1",
     "pytest>=9.2.0",
+    "rapidfuzz>=3.14.6",  # fuzzy text matching for OCR output
 ]
 # Local dev: tests, linting, and the data scripts in ../scripts (faker, reportlab, pypdfium2,
-# pillow, numpy, rapidfuzz). The Docker images install with --no-dev, so none of these ship.
+# pillow, numpy). The Docker images install with --no-dev, so none of these ship.
 dev = [
     { include-group = "test" },
     "faker>=40.44.0",
     "numpy>=2.5.4",
     "pillow>=13.0.0",
     "pypdfium2>=5.14.0",
-    "rapidfuzz>=3.14.6",
     "reportlab>=5.1.0",
     "ruff>=0.17.3",
 ]

@@ -651,6 +651,7 @@ parse = [
 test = [
     { name = "httpx" },
     { name = "pytest" },
+    { name = "rapidfuzz" },
 ]
 
 [package.metadata]
@@ -689,6 +690,7 @@ parse = [
 test = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=9.2.0" },
+    { name = "rapidfuzz", specifier = ">=3.14.6" },
 ]
 
 [[package]]

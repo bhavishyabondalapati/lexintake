@@ -1,0 +1,93 @@
+{
+  "source": "data/synthetic/manifest.json (make synthetic, seed 42)",
+  "documents": [
+    {
+      "doc_id": "syn_00001",
+      "doc_type": "legal_notice",
+      "scanned": false,
+      "scan_rotation_deg": null,
+      "pages": 1,
+      "sha256": "9eb3c1be57ce26a88c3db0a8f5895cf160ef3ddd10d2c8d914fe0557b4a095df",
+      "evidence": {
+        "notice_date": "Date: February 6, 2024",
+        "respondent": "To: Tamarind Harbor Partners Management, LLC",
+        "claimant": "Reference is made to the agreement dated October 4, 2022 between Dominguez Industrial Corp. and Tamarind Harbor Partners Management, LLC (the \"Agreement\").",
+        "agreement_date": "Reference is made to the agreement dated October 4, 2022 between Dominguez Industrial Corp. and Tamarind Harbor Partners Management, LLC (the \"Agreement\").",
+        "cure_period_days": "If the breach is not cured within fifteen (15) days after the date of this notice, Dominguez Industrial Corp. may terminate the Agreement and seek damages."
+      },
+      "tricky": null,
+      "duplicate_of": null
+    },
+    {
+      "doc_id": "syn_00002",
+      "doc_type": "side_letter",
+      "scanned": true,
+      "scan_rotation_deg": -0.9,
+      "pages": 1,
+      "sha256": "5833fb41c929b2395625af1f3df2d3b5cc1e73be430ee58978f4a81355185421",
+      "evidence": {
+        "investor": "This letter agreement (this \"Side Letter\") is entered into as of January 10, 2024 in connection with the subscription by The Martinez Foundation (the \"Investor\") for a limited partner interest in Larchmont Vale Partners Fund II, L.P. (the \"Partnership\").",
+        "fund": "This letter agreement (this \"Side Letter\") is entered into as of January 10, 2024 in connection with the subscription by The Martinez Foundation (the \"Investor\") for a limited partner interest in Larchmont Vale Partners Fund II, L.P. (the \"Partnership\").",
+        "effective_date": "This letter agreement (this \"Side Letter\") is entered into as of January 10, 2024 in connection with the subscription by The Martinez Foundation (the \"Investor\") for a limited partner interest in Larchmont Vale Partners Fund II, L.P. (the \"Partnership\").",
+        "commitment_usd": "The Investor has subscribed for a capital commitment of $33,500,000.00 to the Partnership (the \"Commitment\").",
+        "mfn": "If the General Partner enters into a side letter with another limited partner on terms more favorable than those in this Side Letter, the Investor shall be offered the benefit of those terms.",
+        "co_investment": "The General Partner shall offer the Investor the opportunity to participate in co-investment opportunities alongside the Partnership on a no-fee, no-carry basis."
+      },
+      "tricky": null,
+      "duplicate_of": null
+    },
+    {
+      "doc_id": "syn_00010",
+      "doc_type": "nda",
+      "scanned": false,
+      "scan_rotation_deg": null,
+      "pages": 2,
+      "sha256": "acb4d32562e6e421f1208c469023e204d8336023212140f8832efea930e4dd31",
+      "evidence": {
+        "counterparty": "This Mutual Non-Disclosure Agreement (this \"Agreement\") is entered into as of April 14, 2022 (the \"Effective Date\") by and between Kestrel Ridge Capital Management, LLC and Dalton Foods LLC, a California limited liability company (each, a \"Party\").",
+        "fund_party": "This Mutual Non-Disclosure Agreement (this \"Agreement\") is entered into as of April 14, 2022 (the \"Effective Date\") by and between Kestrel Ridge Capital Management, LLC and Dalton Foods LLC, a California limited liability company (each, a \"Party\").",
+        "effective_date": "This Mutual Non-Disclosure Agreement (this \"Agreement\") is entered into as of April 14, 2022 (the \"Effective Date\") by and between Kestrel Ridge Capital Management, LLC and Dalton Foods LLC, a California limited liability company (each, a \"Party\").",
+        "mutual": "each Party may furnish the other Party with certain information concerning its business.",
+        "term_months": "The obligations under this Agreement shall remain in effect for six (6) months from the Effective Date.",
+        "return_destroy_days": "Within forty-five (45) days after a written request by the disclosing Party, each Party shall return or destroy all Confidential Information in its possession.",
+        "governing_law": "This Agreement shall be governed by and construed in accordance with the laws of the State of New York, without regard to its conflict of laws principles."
+      },
+      "tricky": null,
+      "duplicate_of": null
+    },
+    {
+      "doc_id": "syn_00246",
+      "doc_type": "legal_notice",
+      "scanned": false,
+      "scan_rotation_deg": null,
+      "pages": 1,
+      "sha256": "80809e3502ed018f0202ecdcef87bdc112bd839887e6b337e826420c5279e71a",
+      "evidence": {
+        "notice_date": "Date: January 7, 2022",
+        "respondent": "To: Larchmont Vale Partners Management, LLC",
+        "claimant": "Reference is made to the agreement dated January 3, 2022 between Oliver Software LLC and Larchmont Vale Partners Management, LLC (the \"Agreement\").",
+        "agreement_date": "Reference is made to the agreement dated January 3, 2022 between Oliver Software LLC and Larchmont Vale Partners Management, LLC (the \"Agreement\").",
+        "cure_period_days": "If the breach is not cured within ten (10) days after the date of this notice, Oliver Software LLC may terminate the Agreement and seek damages."
+      },
+      "tricky": "duplicate",
+      "duplicate_of": "syn_00251"
+    },
+    {
+      "doc_id": "syn_00251",
+      "doc_type": "legal_notice",
+      "scanned": false,
+      "scan_rotation_deg": null,
+      "pages": 1,
+      "sha256": "80809e3502ed018f0202ecdcef87bdc112bd839887e6b337e826420c5279e71a",
+      "evidence": {
+        "notice_date": "Date: January 7, 2022",
+        "respondent": "To: Larchmont Vale Partners Management, LLC",
+        "claimant": "Reference is made to the agreement dated January 3, 2022 between Oliver Software LLC and Larchmont Vale Partners Management, LLC (the \"Agreement\").",
+        "agreement_date": "Reference is made to the agreement dated January 3, 2022 between Oliver Software LLC and Larchmont Vale Partners Management, LLC (the \"Agreement\").",
+        "cure_period_days": "If the breach is not cured within ten (10) days after the date of this notice, Oliver Software LLC may terminate the Agreement and seek damages."
+      },
+      "tricky": null,
+      "duplicate_of": null
+    }
+  ]
+}
