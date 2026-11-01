@@ -56,4 +56,7 @@ This is an independent portfolio project. It is NOT affiliated with any firm and
 
 * `make dev` — start everything
 * `make test` — run all tests
+* `make lint` — ruff (backend + scripts), ESLint and TypeScript checks
+* `make data` — download + verify ContractNLI into `data/` (`make data-cuad` adds CUAD)
+* `make synthetic` — generate 500 synthetic PDFs + `data/synthetic/manifest.json` (seed 42)
 * `make eval` — run the evaluation harness
