@@ -1,0 +1,50 @@
+# NDA playbook: the legal team's standard positions for incoming NDAs.
+#
+# Read by backend/app/playbook.py. The synthetic data generator uses it to decide which NDAs
+# deviate (so the manifest's "deviations" always match), and the Phase 4 checker will use it to
+# flag real documents.
+#
+# Field values follow the manifest's null semantics: null means the clause is absent.
+#
+# Checks:
+#   max      value <= limit; null (clause absent) passes
+#   one_of   value is in "allowed"; null fails
+#   absent   passes only if null (the clause must not be there)
+#   present  passes only if not null (the clause must be there)
+
+version: 1
+document_type: nda
+
+rules:
+  - id: max_term
+    field: term_months
+    check: max
+    limit: 24
+    description: The confidentiality term may not exceed 24 months.
+
+  - id: governing_law_allowed
+    field: governing_law
+    check: one_of
+    allowed: [Delaware, New York]
+    description: Governing law must be Delaware or New York.
+
+  - id: non_solicit_max
+    field: non_solicit_months
+    check: max
+    limit: 12
+    description: A non-solicit is acceptable only if it lasts 12 months or less.
+
+  - id: no_non_compete
+    field: non_compete_months
+    check: absent
+    description: No non-compete. A fund cannot agree to stay out of a sector.
+
+  - id: no_residuals
+    field: residuals_clause
+    check: absent
+    description: No residuals clause. It would let the counterparty use what it remembers.
+
+  - id: return_destroy_required
+    field: return_destroy_days
+    check: present
+    description: The NDA must require return or destruction of confidential information.

@@ -81,7 +81,9 @@ python-dotenv==1.2.4
     #   pydantic-settings
     #   uvicorn
 pyyaml==6.0.3
-    # via uvicorn
+    # via
+    #   lexintake-backend
+    #   uvicorn
 redis==6.4.0
     # via kombu
 ruff==0.17.3
