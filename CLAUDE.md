@@ -55,8 +55,13 @@ This is an independent portfolio project. It is NOT affiliated with any firm and
 ## Commands (keep this section updated as they're created)
 
 * `make dev` — start everything
-* `make test` — run all tests
+* `make test` — fast tests (starts the Postgres container; slow Docling tests excluded)
+* `make test-slow` — slow tests with real Docling, inside the worker image
+* `make smoke` — upload a PDF to the running stack and wait until it is parsed
 * `make lint` — ruff (backend + scripts), ESLint and TypeScript checks
 * `make data` — download + verify ContractNLI into `data/` (`make data-cuad` adds CUAD)
 * `make synthetic` — generate 500 synthetic PDFs + `data/synthetic/manifest.json` (seed 42)
+* `make parse-quality` — parse the synthetic set; evidence hit rates + deskew experiment
+* `make ingest-smoke` — send 20 ContractNLI PDFs through the running stack, report crashes
+* `make requeue` — re-queue documents stuck in `received` (`STATUS=received,failed`)
 * `make eval` — run the evaluation harness
