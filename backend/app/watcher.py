@@ -168,6 +168,7 @@ class InboxWatcher:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)  # it logs every change at INFO
     settings = get_settings()
     blobs = LocalBlobStore(settings.blob_dir)
 

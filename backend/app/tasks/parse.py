@@ -10,6 +10,7 @@ import logging
 import time
 import uuid
 
+from celery.signals import worker_process_init
 from sqlalchemy import delete, func, insert, select
 from sqlalchemy.exc import OperationalError
 
@@ -151,3 +152,9 @@ def parse_document(document_id: str) -> str:
         LocalBlobStore(settings.blob_dir),
         settings.parse_max_attempts,
     )
+
+
+@worker_process_init.connect
+def load_models(**_: object) -> None:
+    """Load the Docling models when a worker process starts, not on its first document."""
+    get_parser().warm_up()

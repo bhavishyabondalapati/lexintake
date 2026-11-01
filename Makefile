@@ -1,6 +1,8 @@
-.PHONY: dev down install test lint format requirements data data-cuad synthetic eval
+.PHONY: dev down install test test-slow smoke requeue lint format requirements data data-cuad synthetic \
+	parse-quality ingest-smoke eval
 
-dev: ## Start the whole stack (db, redis, api, worker, frontend)
+dev: ## Start the whole stack (db, redis, migrate, api, watcher, worker, frontend)
+	mkdir -p inbox
 	docker compose up --build
 
 down: ## Stop the stack (add -v to the compose command to also wipe the database)
@@ -10,8 +12,18 @@ install: ## Install backend and frontend dependencies locally
 	cd backend && uv sync
 	cd frontend && npm ci
 
-test: ## Run all tests
+test: ## Run the fast tests (starts the Postgres container; slow Docling tests excluded)
+	docker compose up -d --wait db
 	cd backend && uv run pytest
+
+test-slow: ## Run the slow tests with real Docling, inside the worker image
+	docker compose --profile test run --rm --build worker-test
+
+smoke: ## Upload a PDF to the running stack and wait until it is parsed
+	python3 scripts/compose_smoke.py
+
+requeue: ## Queue parsing again for documents stuck in received (STATUS=received,failed to widen)
+	docker compose exec api python -m app.cli requeue --status $${STATUS:-received}
 
 lint: ## Lint and typecheck backend and frontend
 	cd backend && uv run ruff check . ../scripts && uv run ruff format --check . ../scripts
@@ -31,6 +43,12 @@ data-cuad: ## Same as data, plus the optional CUAD dataset (106 MB)
 
 synthetic: ## Generate 500 synthetic documents + manifest into data/synthetic/ (seed 42)
 	PYTHONPATH=backend uv run --project backend python -m scripts.generate_synthetic
+
+parse-quality: ## Parse the synthetic set; report evidence hit rates and the deskew experiment
+	PYTHONPATH=backend uv run --project backend --group parse python -m scripts.parse_quality
+
+ingest-smoke: ## Send 20 ContractNLI PDFs through the running stack and report crashes
+	PYTHONPATH=backend uv run --project backend python -m scripts.ingest_smoke
 
 eval: ## Run the evaluation harness (Phase 7)
 	@echo "Evaluation harness not built yet (Phase 7)."

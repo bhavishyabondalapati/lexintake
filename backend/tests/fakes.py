@@ -20,6 +20,9 @@ class FakeParser:
         self.failed_pages = failed_pages or []
         self.calls: list[Path] = []
 
+    def warm_up(self) -> None:
+        pass
+
     def parse(self, path: Path) -> ParseResult:
         self.calls.append(path)
         if self.error:
