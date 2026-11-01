@@ -9,6 +9,7 @@ Needs the stack running (`make dev`) and `make data`. Reads ports and the DB pas
 
     make ingest-smoke
     PYTHONPATH=backend uv run --project backend python -m scripts.ingest_smoke --n 20 --watch 3
+    ... ingest_smoke --n 0 --watch 0 --files NDA-2015-2.pdf   # specific files only
 """
 
 import argparse
@@ -67,6 +68,9 @@ def main() -> None:
     parser.add_argument("--watch", type=int, default=3, help="extra PDFs for the inbox watcher")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--timeout", type=float, default=1200)
+    parser.add_argument(
+        "--files", nargs="*", default=[], help="specific raw/ file names to upload as well"
+    )
     args = parser.parse_args()
 
     api, db_url = settings()
@@ -75,6 +79,9 @@ def main() -> None:
         raise SystemExit(f"no PDFs in {RAW}; run `make data` first")
     sample = random.Random(args.seed).sample(pdfs, args.n + args.watch)
     upload, watch = sample[: args.n], sample[args.n :]
+    extra = [RAW / name for name in args.files if RAW / name not in sample]
+    upload += extra
+    sample += extra
     shas = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sample}
 
     started = time.monotonic()
