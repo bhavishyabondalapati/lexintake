@@ -4,23 +4,41 @@ version = "0.1.0"
 description = "LexIntake API and background workers"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.20.1",
     "celery[redis]>=5.6.3",
     "fastapi>=0.162.0",
+    "psycopg[binary]>=3.3.6",
     "pydantic-settings>=2.16.2",
+    "python-multipart>=0.0.20",
     "pyyaml>=6.0.3",
+    "sqlalchemy>=2.1.6",
     "uvicorn[standard]>=0.54.0",
+    "watchfiles>=1.3.0",
 ]
 
 [dependency-groups]
-# Dev-only: tests, linting, and the data scripts in ../scripts (faker, reportlab, pypdfium2,
-# pillow, numpy). The Docker image installs with --no-dev, so none of these ship in it.
-dev = [
-    "faker>=40.44.0",
+# Heavy: Docling (PDF parsing, layout model, RapidOCR) and CPU-only torch. Only the worker image
+# installs this group (`uv sync --group parse`), so the api image and a plain `uv sync` stay light.
+parse = [
+    "docling-slim[convert-core,format-pdf,models-local,feat-ocr-rapidocr-onnx]>=2.145.0",
+    # Listed directly (Docling already needs them) so the CPU-only index below applies to them.
+    "torch>=2.15.0",
+    "torchvision>=0.29.1",
+]
+# What the tests themselves need. The worker-test image adds this group on top of `parse`.
+test = [
     "httpx>=0.28.1",
+    "pytest>=9.2.0",
+]
+# Local dev: tests, linting, and the data scripts in ../scripts (faker, reportlab, pypdfium2,
+# pillow, numpy, rapidfuzz). The Docker images install with --no-dev, so none of these ship.
+dev = [
+    { include-group = "test" },
+    "faker>=40.44.0",
     "numpy>=2.5.4",
     "pillow>=13.0.0",
     "pypdfium2>=5.14.0",
-    "pytest>=9.2.0",
+    "rapidfuzz>=3.14.6",
     "reportlab>=5.1.0",
     "ruff>=0.17.3",
 ]
@@ -28,6 +46,19 @@ dev = [
 # Not a library: uv installs the dependencies only, the code runs from ./app.
 [tool.uv]
 package = false
+# Only lock for where this runs: Linux (Docker, CI) and macOS (local dev).
+environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+
+# CPU-only torch on Linux (the Docker images): PyPI's default Linux wheel bundles ~5 GB of CUDA
+# libraries we never use. macOS keeps the normal PyPI wheel, which supports Apple's MPS.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.ruff]
 line-length = 100
@@ -43,3 +74,9 @@ known-first-party = ["app", "scripts"]
 testpaths = ["tests"]
 # ".." puts the repo root on the path so tests can import scripts/.
 pythonpath = [".", ".."]
+# Slow tests load the real Docling models. `pytest -m slow` overrides this (the last -m wins).
+addopts = ["-m", "not slow"]
+markers = [
+    "slow: real Docling parsing (needs the `parse` group or the worker-test image)",
+    "db: needs a Postgres database (TEST_DATABASE_URL)",
+]

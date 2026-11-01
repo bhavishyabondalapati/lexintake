@@ -31,3 +31,7 @@ playwright-report/
 .DS_Store
 .idea/
 .vscode/
+
+# Local runtime folders (inbox for the folder watcher, blob store outside Docker)
+inbox/
+backend/.blobs/
