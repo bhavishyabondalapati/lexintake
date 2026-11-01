@@ -8,7 +8,7 @@ lawyers only review the documents that get flagged.
 > Independent portfolio project, not affiliated with any firm. It uses only public and synthetic
 > data.
 
-**Status:** Phase 0 (scaffold) and Phase 1 (data) are done. The pipeline is built phase by phase.
+**Status:** Phase 0 (scaffold), Phase 1 (data) and Phase 2 (ingestion & parsing) are done. The pipeline is built phase by phase.
 See [PROMPTS.md](PROMPTS.md).
 
 ## The problem
@@ -44,8 +44,35 @@ flowchart LR
 ```
 
 Phase 0 builds the boxes that hold everything up: FastAPI, the Celery worker, Redis, Postgres
-with pgvector, and the Next.js app, all running together in Docker Compose. The pipeline steps
-come in Phases 2–6.
+with pgvector, and the Next.js app, all running together in Docker Compose. Phase 2 adds intake
+and parsing (below). Classification, extraction, the playbook check and review come in Phases 3–6.
+
+### Ingestion and parsing (Phase 2)
+
+```mermaid
+flowchart LR
+    subgraph api_image["lexintake-api image (small, no ML)"]
+        UP["POST /documents<br/>PDF header + size check"]
+        WA["watcher<br/>waits until a file stops growing"]
+        IN["intake: SHA-256<br/>new or duplicate?"]
+    end
+    UP --> IN
+    WA --> IN
+    IN -->|new| BL[("blobs volume<br/>ab/cd/sha256.pdf")]
+    IN -->|new: row + audit| DB[("Postgres<br/>documents, text_blocks, audit_log")]
+    IN -->|duplicate: audit only| DB
+    IN -->|new: enqueue by name| RQ[(Redis queue: parse)]
+    RQ --> WK
+    subgraph worker_image["lexintake-worker image (Docling, CPU torch, models baked in)"]
+        WK["parse task<br/>text layer? no OCR : OCR"]
+    end
+    BL --> WK
+    WK -->|blocks with page + bbox<br/>status parsed / failed| DB
+```
+
+Status flow: `received → parsing → parsed`, or `failed` with the error saved. Every change writes
+a row in `audit_log` in the same transaction. A duplicate upload writes an audit row too
+(`detail.event = "duplicate_received"`) but never starts a second parse.
 
 ## Tools and libraries, and why
 
@@ -57,7 +84,7 @@ come in Phases 2–6.
 | **Celery + Redis** | Parsing and LLM calls are slow, so they run as background jobs. Redis is the queue. Celery gives retries and acknowledges a job only after it finishes, so a crashed worker doesn't lose it. |
 | **Postgres 16 + pgvector** | One database for document metadata, the audit log, cost tracking and (later) embeddings. That means fewer moving parts than a separate vector database. |
 | **Next.js + TypeScript + Tailwind** | Server components can call the API over the internal Docker network. TypeScript catches mistakes before runtime, and Tailwind keeps styling quick. |
-| **Docker Compose** | One command starts all five services with the same setup on any machine. |
+| **Docker Compose** | One command starts every service (database, queue, migrations, API, watcher, worker, frontend) with the same setup on any machine. |
 | **ruff, pytest, ESLint** | Fast linting and formatting for Python, tests for the backend, and linting for the frontend. |
 | **GitHub Actions** | Runs lint, tests, the lockfile check and a full `docker compose up` smoke test on every push. |
 | **PyYAML** | The NDA playbook is a YAML file, so lawyers could read and edit the rules without touching code. `safe_load` never runs code from the file. |
@@ -65,12 +92,27 @@ come in Phases 2–6.
 | **ReportLab** | Builds the synthetic PDFs from text. Its `invariant` mode removes timestamps and random IDs, so the same input gives a byte-identical PDF. |
 | **pypdfium2** | Python bindings for PDFium, Chrome's PDF engine. It rasterises pages to make scanned copies, and the tests use it to read the text layer. |
 | **Pillow + NumPy** | Pillow rotates and blurs the page images and saves them as an image-only PDF. NumPy adds seeded noise and dust specks. |
+| **SQLAlchemy 2 + psycopg 3** | Typed table models and plain synchronous sessions (both FastAPI's sync endpoints and Celery are sync, which keeps things simple). psycopg 3 is the current Postgres driver. |
+| **Alembic** | Database migrations: every schema change is a versioned script, so any database can be brought to the current schema with `alembic upgrade head`. A test fails if the models and migrations drift apart. |
+| **watchfiles** | Watches the inbox folder (Rust-based, already installed with uvicorn). It can fall back to polling, which Docker Desktop bind mounts need. |
+| **Docling** (`docling-slim`) | Layout-aware PDF parsing: it finds paragraphs, headings, list items and tables, with a bounding box and page for each one, in reading order. The `-slim` package lets the worker install only PDF + layout + OCR, not Office/audio support. |
+| **RapidOCR on onnxruntime** | Docling's default OCR engine: CPU-friendly, small models, and it doesn't need a second copy of torch (EasyOCR would). It reports a confidence score per page. |
+| **PyTorch, CPU-only build** | Docling's layout model runs on torch. The default Linux wheel bundles ~5 GB of NVIDIA CUDA libraries we never use, so the worker installs torch from PyTorch's CPU index instead. |
+| **rapidfuzz** | Fuzzy string matching for OCR output, where small character mistakes make exact matching useless. |
 
-Faker, ReportLab, pypdfium2, Pillow and NumPy are only used by the data scripts and tests, so they
-sit in uv's `dev` group and stay out of the Docker image.
+**Dependency groups** (in `backend/pyproject.toml`) decide what goes where:
 
-Coming in later phases: Docling (layout-aware PDF parsing + OCR), the Anthropic SDK (classification
-and extraction) and Playwright (end-to-end tests for the dashboard).
+| Group | Contents | Installed in |
+| --- | --- | --- |
+| main | FastAPI, SQLAlchemy, Alembic, Celery, watchfiles, ... | every image, and locally |
+| `parse` | Docling, CPU-only torch, RapidOCR | the worker image only (and locally with `--group parse`) |
+| `test` | pytest, httpx, rapidfuzz | locally, CI, and the worker-test image |
+| `dev` | `test` + ruff + the data-script packages (Faker, ReportLab, ...) | locally and CI |
+
+A plain `uv sync` never downloads torch, so the fast tests and the backend CI job stay quick.
+
+Coming in later phases: the Anthropic SDK (classification and extraction) and Playwright
+(end-to-end tests for the dashboard).
 
 ## File structure
 
@@ -80,18 +122,23 @@ lexintake/
 ├── PROMPTS.md                    # Phase-by-phase build prompts (Phases 0–9)
 ├── README.md                     # This file
 ├── LICENSE                       # MIT license
-├── Makefile                      # Shortcuts: make dev / test / lint / requirements / eval
-├── docker-compose.yml            # db, redis, api, worker, frontend, with healthchecks
+├── Makefile                      # Shortcuts: make dev / test / test-slow / smoke / lint / ...
+├── docker-compose.yml            # db, redis, migrate, api, watcher, worker, frontend (+ worker-test)
 ├── requirements.txt              # Pinned backend deps exported from uv.lock (CI checks it is in sync)
 ├── .env.example                  # Every env var the app reads, placeholder values only
 ├── .gitignore                    # Keeps .env, data/, .venv/, node_modules/ etc. out of git
-├── .github/workflows/ci.yml      # CI: backend, frontend, and Docker Compose smoke test
+├── .github/workflows/ci.yml      # CI on every push: backend (+Postgres), frontend, compose end-to-end
+├── .github/workflows/slow-tests.yml # Real-Docling tests: parsing-related changes, nightly, on demand
+├── inbox/                        # Gitignored. Drop PDFs here; the watcher ingests them
 ├── db/init/01_extensions.sql     # Enables pgvector the first time Postgres starts
 ├── playbook/
 │   └── nda_playbook.yaml         # The legal team's standard NDA terms (max term, allowed law, ...)
 ├── scripts/
 │   ├── __init__.py               # Makes scripts/ importable (tests, python -m)
 │   ├── download_data.py          # Downloads ContractNLI (+ CUAD), checks SHA-256, safe to re-run
+│   ├── compose_smoke.py          # Upload → wait for parsed → re-upload as duplicate (stdlib only)
+│   ├── parse_quality.py          # Evidence hit rates on the synthetic set + deskew experiment
+│   ├── ingest_smoke.py           # Sends ContractNLI's raw PDFs through the running stack
 │   ├── generate_synthetic.py     # CLI: plans the document mix, renders PDFs, writes the manifest
 │   └── synth/
 │       ├── __init__.py           # Package docstring: how the three modules fit together
@@ -102,21 +149,54 @@ lexintake/
 │   ├── contractnli/              # train/dev/test.json, LICENSE, raw/ original NDAs
 │   ├── cuad/                     # Optional (make data-cuad)
 │   ├── downloads/                # Verified zip archives, kept so re-runs needn't download again
-│   └── synthetic/                # docs/syn_00001.pdf ... and manifest.json
+│   ├── synthetic/                # docs/syn_00001.pdf ... and manifest.json
+│   └── reports/                  # parse_quality.{md,json}, ingest_smoke.{md,json}
 ├── backend/
 │   ├── pyproject.toml            # Backend dependencies + ruff and pytest settings
 │   ├── uv.lock                   # Exact pinned versions of every dependency
 │   ├── .python-version           # Tells uv to use Python 3.12
-│   ├── Dockerfile                # Image shared by the api and worker services
-│   ├── .dockerignore             # Keeps .venv and tests out of the image
+│   ├── Dockerfile                # Targets: api (small), worker (Docling + models), worker-test
+│   ├── .dockerignore             # Keeps .venv, caches and .env out of the build context
+│   ├── alembic.ini               # Alembic settings (the DB URL comes from DATABASE_URL)
+│   ├── alembic/
+│   │   ├── env.py                # Runs migrations against DATABASE_URL (or a test connection)
+│   │   ├── script.py.mako        # Template for new migration files
+│   │   └── versions/0001_ingestion_tables.py # documents, text_blocks, audit_log
 │   ├── app/
 │   │   ├── __init__.py           # Marks app/ as a package
-│   │   ├── config.py             # Settings read from env vars (DB, Redis, CORS, Anthropic)
-│   │   ├── main.py               # FastAPI app, CORS setup, GET /health
+│   │   ├── config.py             # Settings read from env vars (DB, Redis, blobs, inbox, limits, ...)
+│   │   ├── main.py               # FastAPI app, CORS setup, GET /health, document routes
+│   │   ├── db.py                 # SQLAlchemy engine, session_scope(), FastAPI session dependency
+│   │   ├── models.py             # Tables: Document, TextBlock, AuditLog; Status enum
+│   │   ├── status.py             # transition(): the only place a status changes (+ audit row)
+│   │   ├── intake.py             # Shared intake: PDF check, hash, dedupe, store, audit, enqueue
+│   │   ├── queue.py              # Sends the parse task to Celery by name (no Docling import)
+│   │   ├── watcher.py            # Inbox watcher with the file-stability check
+│   │   ├── cli.py                # python -m app.cli requeue: re-queue received/failed documents
 │   │   ├── playbook.py           # Loads the playbook YAML and evaluates NDA fields against it
-│   │   └── worker.py             # Celery app and a `ping` task
+│   │   ├── worker.py             # Celery app, queue routing, `ping` task
+│   │   ├── routes/documents.py   # POST /documents (upload), GET /documents/{id}
+│   │   ├── storage/blobs.py      # BlobStore interface + LocalBlobStore (content-addressed)
+│   │   ├── parsing/
+│   │   │   ├── __init__.py       # get_parser(): builds the Docling parser once per process
+│   │   │   ├── base.py           # Parser interface, Block, ParseResult, ParseError
+│   │   │   ├── docling_parser.py # Per-page text-layer check, Docling passes, blocks with bboxes
+│   │   │   └── download_models.py # Downloads the models at image build time
+│   │   └── tasks/parse.py        # The Celery parse task: lock, claim, parse, save, audit
 │   └── tests/
 │       ├── __init__.py           # Marks tests/ as a package
+│       ├── conftest.py           # Fresh lexintake_test database per run, migrated; per-test cleanup
+│       ├── fakes.py              # FakeParser and RecordingQueue, so unit tests never load Docling
+│       ├── test_migrations.py    # Tables exist; downgrade/upgrade works; models match migrations
+│       ├── test_status.py        # Allowed transitions write audit rows; others are refused
+│       ├── test_blobs.py         # Content-addressed paths, no-op re-put, atomic write
+│       ├── test_upload.py        # 201 new / 200 duplicate / 415 / 413 / concurrent duplicates
+│       ├── test_watcher.py       # Growing files wait; processed/rejected moves; retry on errors
+│       ├── test_parse_task.py    # Idempotency, redelivery, failures, poison guard, locks
+│       ├── test_cli.py           # requeue picks the right documents
+│       ├── test_image_split.py   # The api image's dependencies contain no torch/Docling
+│       ├── fixtures/             # 5 synthetic PDFs (digital, scanned, duplicate pair) + manifest
+│       ├── integration/          # Slow tests with real Docling (pytest -m slow)
 │       ├── test_health.py        # /health returns ok; CORS allows the frontend, blocks others
 │       ├── test_config.py        # Env vars parse correctly (CORS list, model name)
 │       ├── test_worker.py        # Celery ping task runs and is registered
@@ -167,11 +247,34 @@ make dev
 If ports 3000/8000 are already in use, set `FRONTEND_PORT` / `API_PORT` in `.env` and update
 `NEXT_PUBLIC_API_URL` and `CORS_ORIGINS` to match.
 
+Send it a document, either through the API or by dropping a file in the inbox:
+
+```bash
+curl -F "file=@backend/tests/fixtures/syn_00001.pdf" http://localhost:8000/documents
+curl http://localhost:8000/documents/<id from the response>     # status, page_count, block_count
+cp backend/tests/fixtures/syn_00002.pdf inbox/                    # the watcher picks it up
+make smoke                                                         # upload, wait for parsed, re-upload
+```
+
+The first upload returns `201` with `"status": "received"`. A few seconds later `GET` shows
+`"parsed"`. Uploading the same bytes again returns `200` with `"duplicate": true` and the same id.
+Files dropped in `inbox/` move to `inbox/.processed/` (or `inbox/.rejected/` with a `.reason.txt`).
+
 Run the tests and linters:
 
 ```bash
-make test
+make test        # fast tests (~5 s); starts the Postgres container if it isn't running
+make test-slow   # slow tests with real Docling, inside the worker image (~20 s once built)
 make lint
+```
+
+To run the slow tests without Docker: `cd backend && uv sync --group parse && uv run pytest -m slow`.
+
+Check parsing quality and robustness (Phase 2 reports, written to `data/reports/`):
+
+```bash
+make parse-quality   # needs make synthetic; ~8 min on an M4 Pro (uses the GPU via MPS)
+make ingest-smoke    # needs make data and the stack running; 23 ContractNLI PDFs end to end
 ```
 
 Get the data (see [Data](#data) for what each one is):
@@ -189,8 +292,10 @@ synthetic` replaces the previous output. For other options, call the generator d
 PYTHONPATH=backend uv run --project backend python -m scripts.generate_synthetic --seed 7 --n 1000
 ```
 
-Other commands: `make down` (stop the stack), `make requirements` (regenerate `requirements.txt`
-after changing dependencies), `make eval` (evaluation harness, Phase 7).
+Other commands: `make down` (stop the stack), `make requeue` (re-queue documents stuck in
+`received`, e.g. if Redis was down at upload time; `STATUS=received,failed make requeue` also
+retries failed ones), `make requirements` (regenerate `requirements.txt` after changing
+dependencies), `make eval` (evaluation harness, Phase 7).
 
 ## Data
 
@@ -315,6 +420,118 @@ byte-identical PDFs and manifest. That's why the manifest can store each file's 
 different OS the fields, text and evidence stay identical, but scanned-PDF bytes, and so their
 hashes, can differ slightly, because image rendering and JPEG compression vary by platform.
 
+## Ingestion & parsing (Phase 2)
+
+### What happens to a file
+
+1. **Intake** (`app/intake.py`, shared by the upload endpoint and the watcher). The file must start
+   with `%PDF-` (within the first 1 KB, as the PDF spec allows) and be under `MAX_UPLOAD_MB`
+   (default 50), or it gets `415` / `413`. Then its SHA-256 is computed.
+2. **Dedupe.** `INSERT ... ON CONFLICT (sha256) DO NOTHING` either creates the row or finds that
+   these exact bytes were seen before. Two simultaneous uploads of the same file can't both win.
+   A duplicate gets an audit row and returns the existing document; nothing is stored or parsed
+   again.
+3. **Store.** The original goes into the blob store under its own hash (`ab/cd/abcd….pdf`), written
+   to a temp file and renamed, so a crash never leaves half a file. Phase 5's `StorageAdapter` will
+   file *copies* out of here; the blob store stays the untouchable original.
+4. **Queue.** Only after the row is committed is the parse task queued (by name, so the API never
+   imports Docling). If Redis is down, the document stays `received` and `make requeue` picks it up.
+5. **Parse** (`app/tasks/parse.py`, worker image). pypdfium2 checks each page for a text layer
+   (≥ 20 visible characters). Pages with text go through Docling without OCR; pages without get
+   full-page RapidOCR. Each text block is saved with its page, bounding box (PDF points, top-left
+   origin, ready for highlighting in Phase 6), Docling label, reading order, `source`
+   (`text_layer` / `ocr`) and, for OCR, a confidence.
+
+**Safe to retry.** A `parsed` document is never parsed again. A Postgres advisory lock stops two
+workers from parsing the same document at once. Blocks are replaced (delete + insert) in the same
+transaction that sets `parsed`, so a re-run can't duplicate them. Each attempt is counted *before*
+parsing starts, so a PDF that crashes the worker outright is marked `failed` after
+`PARSE_MAX_ATTEMPTS` (3) instead of being redelivered forever.
+
+### Two images: why and how
+
+Docling needs PyTorch, its layout model and the OCR models. Putting all that in the API would make
+a 400 MB web server into a multi-GB one that takes longer to build, pull and start. So
+`backend/Dockerfile` has build targets that share their base layers:
+
+| Image | Target | Used by | Contains | Size* |
+| --- | --- | --- | --- | --- |
+| `lexintake-api` | `api` | api, watcher, migrate | Python + main dependencies + app | ~440 MB |
+| `lexintake-worker` | `worker` | Celery worker | + Docling, CPU-only torch, RapidOCR, models | ~2.8 GB |
+| `lexintake-worker-test` | `worker-test` | slow tests only | + pytest and the tests | ~2.8 GB |
+
+\*Uncompressed, linux/arm64 on a Mac. Of the worker's size, ~1.7 GB is Python packages (torch alone
+is 690 MB) and 730 MB is models.
+
+- **CPU-only torch.** `[tool.uv.sources]` points torch and torchvision at
+  `download.pytorch.org/whl/cpu` on Linux, which drops ~5 GB of CUDA libraries. macOS keeps the
+  normal wheel (which supports MPS).
+- **Models at build time.** The model download is its own layer, *before* the app code is copied,
+  so changing code never re-downloads 730 MB. At runtime `HF_HUB_OFFLINE=1` turns a missing model
+  into an error instead of a surprise download, and the worker loads the models when each process
+  starts, not on the first document.
+- **Guards.** A fast test checks the api image's dependency list has no torch/Docling/onnxruntime.
+  CI also tries `import docling` and `import torch` inside the running api container and fails if
+  either works.
+
+### Fast and slow tests in CI
+
+| Workflow / job | When | What | Time |
+| --- | --- | --- | --- |
+| `ci.yml` → backend | every push and PR | ruff, fast pytest (fake parser) with a Postgres service; never installs torch | ~1–2 min |
+| `ci.yml` → compose | every push and PR | builds api + worker images with GitHub Actions layer cache, boots the stack, uploads a real PDF, waits for the real worker to parse it, re-uploads it as a duplicate | ~3 min warm, ~10 cold |
+| `slow-tests.yml` | PRs/pushes touching parsing, tasks, intake, models, migrations, Dockerfile, deps, fixtures or integration tests; nightly; manual button | real Docling on digital, scanned, duplicate and corrupt fixtures, inside the worker-test image | a few minutes |
+
+The slow tests are marked `@pytest.mark.slow`, and `pytest` skips them by default
+(`addopts = -m "not slow"`). They run inside the same image that ships, so CPU torch, the baked
+models and the system libraries are all tested together. The worker-test image reuses the worker's
+cached layers, so building it is cheap. A docs or frontend change never triggers them. The nightly
+run catches drift that no path filter would see, such as a base-image update.
+
+### Results
+
+Numbers from `make parse-quality` (500 synthetic docs, M4 Pro, about 8 minutes including the
+deskew experiment) and `make ingest-smoke` (ContractNLI originals through the running Docker stack).
+Full reports are written to `data/reports/`.
+
+**Synthetic set: are the ground-truth evidence strings in the parsed text?**
+
+| | Docs | Evidence strings | Found | Wrong source* | Seconds / page |
+| --- | --- | --- | --- | --- | --- |
+| Digital (exact match) | 400 | 2,412 | **100%** | 0 | 0.08 |
+| Scanned (fuzzy, score ≥ 90) | 100 | 600 | **91.5%** (≥ 80: 93.5%, mean score 97.3) | 0 | 0.99 |
+
+\*A digital doc with any OCR block, or a scanned doc with any text-layer block. Zero means the
+per-page text-layer check routed every page correctly.
+
+The scanned misses aren't scattered typos. In 31 of the 100 scans, RapidOCR dropped or garbled a
+whole line or two (one line of a clean scan came out as "Trn rn n i n tt n t ts"). Mean OCR
+confidence is still 0.98, so confidence alone won't catch it. That matters for Phase 3:
+extraction from OCR'd pages needs lower trust, and missing fields there should go to
+`needs_review`.
+
+**Deskew experiment (100 scans, rotated 0.5–2.5°):**
+
+| Variant | Mean score | ≥ 80 | ≥ 90 | ≥ 90 by rotation (<1° / 1–2° / >2°) |
+| --- | --- | --- | --- | --- |
+| As-is (what the worker does) | 97.28 | 93.5% | 91.5% | 90.4% / 93.4% / 87.5% |
+| Oracle (rotated back by the true angle) | 98.21 | 96.0% | 93.5% | 92.1% / 94.3% / 92.7% |
+| Estimated angle (projection profile) | 97.50 | 94.2% | 91.0% | 92.1% / 92.6% / 86.0% |
+
+The estimate is very accurate (mean error 0.04°, max 0.11°), but deskewing barely helps. Even a
+perfect deskew adds only 2 points at ≥ 90, mostly on the >2° scans, and the realistic version
+gains nothing (−0.5). So deskew is **not** added to the worker; the line drops above are a bigger
+target (e.g. try RapidOCR's medium model or Tesseract).
+
+**ContractNLI originals (real-world PDFs) through the full stack:**
+
+- 23 random PDFs (seed 0): 20 uploaded through the API and 3 dropped in the inbox. **23/23 parsed,
+  no crashes**, 2–15 pages each, 1–11 s per document.
+- A scan of all 375 raw PDFs found 367 with a text layer on every page and 8 that mix text pages
+  with image-only pages (none are fully scanned). **All 8 parsed**, and their image-only pages came
+  back as `ocr` blocks (confidence 0.96–0.98). One "image-only" page was an empty table with just a
+  page number, so it correctly gave no blocks.
+
 ## Evaluation results
 
 Coming in Phase 7.
@@ -334,6 +551,18 @@ Coming in Phase 7.
    makes scanned copies with no text layer. It adds duplicates, near-duplicates and unusual titles,
    and writes a manifest. Tests check that the manifest matches the files and that every evidence
    string really appears in the PDF.
+3. **Phase 2, ingestion & parsing.** I added SQLAlchemy and Alembic and wrote the first migration
+   (documents, text_blocks, audit_log), with one `transition()` function as the only way to change
+   a status, so every change is audited. Then I built the content-addressed blob store, the shared
+   intake path (PDF check, hash, race-safe dedupe, store, queue), the upload endpoint and the inbox
+   watcher with its file-stability check. Next came the parse task behind a `Parser` interface,
+   tested with a fake parser for idempotency, crashes, retries and locks, and then the real Docling
+   parser with a per-page text-layer check. I split the Docker image into a small api image and a
+   worker image with CPU-only torch and models baked in. Running the slow tests inside that image
+   showed the layout model merging whole pages into one block. The cause was that Docling's default
+   renderer had no fonts in the slim image; switching to the pdfium backend fixed it, and a test now
+   guards against it. Last, I set up CI (Postgres service, cached image builds, an end-to-end upload,
+   a separate slow-test workflow) and wrote the quality and ContractNLI crash-test scripts.
 
 ## Key concepts
 
@@ -380,6 +609,49 @@ Coming in Phase 7.
 - **Single source of truth.** The playbook YAML defines "standard terms" once. The generator uses
   it to label the data, and Phase 4's checker will use it to flag real documents, so the labels and
   the checker can't drift apart.
+- **Database migrations (Alembic).** The schema lives in versioned scripts, not in "whatever
+  the tables look like on my laptop". `alembic upgrade head` brings any database up to date, and a
+  one-shot `migrate` container runs it before the api and worker start. `alembic check` (run as a
+  test) fails if someone edits the models without writing a migration.
+- **Content-addressed storage.** Files are stored under their own SHA-256. The same bytes always
+  land at the same path, so storing a duplicate is a no-op and a stored file can't be silently
+  changed.
+- **Race-safe dedupe with `ON CONFLICT`.** "Check if it exists, then insert" has a gap where two
+  requests can both see "no" and both insert. Letting the database's unique constraint decide
+  (`INSERT ... ON CONFLICT DO NOTHING RETURNING id`) closes that gap. A test fires four uploads at
+  once and checks only one document is created.
+- **Idempotent, retryable tasks.** A queue can deliver the same task twice (for example after a
+  worker crash, because of `acks_late`). The parse task is written so running it twice gives the
+  same result as once: it skips parsed documents, takes an advisory lock, and replaces blocks in
+  one transaction.
+- **Poison messages.** A file that crashes the worker never reaches the `except` block, so the
+  task counts each attempt before it starts. After 3 attempts the document is marked `failed`
+  instead of crashing workers forever.
+- **Commit, then enqueue.** The task is queued only after the database row is committed. Otherwise
+  a fast worker could look for a row that doesn't exist yet.
+- **Splitting images by dependency weight.** The API and the worker run the same code but need very
+  different libraries. Build targets in one Dockerfile share the common layers, uv dependency
+  groups decide which packages each target gets, and Docker's layer cache means the big layers
+  (torch, models) are only rebuilt when the lockfile changes.
+- **Fast vs slow tests.** Most logic (dedupe, statuses, retries, the watcher) is tested in
+  milliseconds with a fake parser. A handful of slow tests check the real parser, and CI runs them
+  only when something they cover changes, plus nightly.
+- **"Works on my Mac" bugs.** The parser gave 17 blocks on macOS and 3 in Docker for the same PDF.
+  The model, weights and math were identical; the page *image* wasn't. Docling's default renderer
+  drew text with system fonts, and the slim image has none. The lesson: test inside the image that
+  ships, and compare inputs step by step until they differ.
+- **Text layer vs OCR, per page.** OCR is slow and makes mistakes, so it should only run where
+  there is no text to read. Checking each page separately handles PDFs that mix typed pages with
+  scanned signature pages.
+- **Waiting for a file to finish arriving.** A file being copied into a folder exists before it's
+  complete. The watcher waits until its size and modified time stay the same for two checks and
+  it's at least 2 seconds old.
+- **Fuzzy matching.** OCR turns "VII, L.P." into "VII,L.P.", so exact matching would call that a
+  miss. `partial_ratio` scores how well the best-matching part of the text lines up with the
+  evidence (0–100).
+- **Deskewing with a projection profile.** If you add up the ink in each row of a page image, level
+  text lines give sharp peaks and gaps; tilted lines smear them out. Trying small rotations and
+  keeping the one with the sharpest profile (highest variance) estimates the tilt.
 - **Explicit null semantics.** "Clause absent", "unknown" and "not applicable" are different
   things. The manifest uses `null` only for "absent" and leaves out fields that don't apply.
   Phase 3's "the model isn't sure" will be a separate confidence score, so grading never has to
@@ -395,13 +667,31 @@ Coming in Phase 7.
   `.env` (see the "How to run" section).
 - **ContractNLI is text, not PDFs (next step for Phase 7).** The labels and evidence spans in
   `train/dev/test.json` are character offsets into each NDA's plain `text`. The zip also ships
-  originals in `raw/` (363 PDFs plus text/HTML files), but their layout doesn't match those
+  originals in `raw/` (375 PDFs plus 113 .htm and 119 .txt files), but their layout doesn't match those
   offsets. So Phase 7 will need to either render the JSON text to PDF, reusing
   `scripts/synth/render.py` so the offsets still line up, or let the pipeline accept text input
   directly. This isn't built yet.
-- **Playbook path inside Docker.** `backend/app/playbook.py` looks for `playbook/` at the repo
-  root, which isn't copied into the backend image. Phase 4 will mount or copy it when the worker
-  starts using the playbook.
+- **Playbook path inside Docker (Phase 4 must fix).** `backend/app/playbook.py` looks for
+  `playbook/` at the repo root, which isn't in the backend images (their build context is
+  `./backend`). Phase 4 must either mount it read-only into the worker (`./playbook:/playbook:ro`
+  plus a setting for the path), which is simplest, or move the build context to the repo root and
+  `COPY` it.
+- **A writer that pauses mid-file can fool the watcher.** A file is picked up after it hasn't
+  changed for ~2 seconds. If something writes half a file, pauses longer than that, then finishes,
+  the watcher takes the half file (which then fails parsing with a clear error). Real copies,
+  scanners and sync clients write continuously, or write to a temp name and rename, which the
+  watcher handles (temp names like `*.part` and `*.tmp` are ignored).
+- **Mixed documents are parsed twice.** A PDF with both text pages and image-only pages runs
+  through Docling once without OCR and once with it, keeping each page from the right pass. Mixed
+  documents are rare (8 of 375 in ContractNLI), but an 11-page one with a single scanned page took
+  40 s instead of ~6 s. Running the OCR pass on just the scanned pages (Docling's `page_range`)
+  would fix it.
+- **OCR occasionally drops whole lines** (see Results). Confidence scores don't reveal it.
+- **The worker image is big (~2.8 GB).** Most of it is torch (CPU-only) and 730 MB of models.
+  It's built once and cached; only the small app layer changes between commits.
+- **Intermediate commit.** In this phase's history, the upload commit imports a constant from
+  `app/worker.py` that only arrives two commits later. The branch tip is fine; bisecting across
+  those two commits would hit an import error.
 
 ## License
 
