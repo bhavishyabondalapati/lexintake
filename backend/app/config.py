@@ -30,9 +30,27 @@ class Settings(BaseSettings):
     # "auto" picks mps on a Mac, cuda if present, else cpu. The worker image is CPU-only.
     parse_device: str = "auto"
 
-    # Used from Phase 3. The model name always comes from the environment.
+    # Classification + extraction (Phase 3). Model names always come from the environment, never
+    # from code: a cheap model classifies every document (and reads the small non-NDA field sets),
+    # a stronger one extracts the full NDA fields.
     anthropic_api_key: str = ""
-    anthropic_model: str = ""
+    anthropic_model_classify: str = ""
+    anthropic_model_extract: str = ""
+    # output_config.effort per step ("low" ... "max"); empty = don't send it.
+    anthropic_effort_classify: str = "low"
+    anthropic_effort_extract: str = "medium"
+    # The SDK retries 408/409/429/5xx and connection errors this many times, with backoff.
+    anthropic_max_retries: int = 4
+    # Spend cap in USD: per run for `app.cli extract`, per UTC day for the extract worker.
+    max_spend_usd: float = 1.0
+    # Off: uploading a file never spends money by itself. On: a parsed document is queued for
+    # extraction straight away.
+    extract_on_parse: bool = False
+    # Routing thresholds. The model's own confidence can only send a document to review, never
+    # past a failed check (see app/extraction/route.py).
+    classify_min_confidence: float = 0.8
+    field_min_confidence: float = 0.8
+    ocr_field_min_confidence: float = 0.9
 
     @field_validator("cors_origins", mode="before")
     @classmethod

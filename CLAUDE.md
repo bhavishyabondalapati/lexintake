@@ -23,7 +23,7 @@ This is an independent portfolio project. It is NOT affiliated with any firm and
 * Postgres 16 + pgvector (metadata, audit log, embeddings in one DB)
 * Redis + Celery for background jobs
 * Docling for parsing/OCR
-* Anthropic Python SDK for classification + extraction (model name from env var `ANTHROPIC_MODEL`, never hardcoded); use structured/JSON outputs validated by Pydantic
+* Anthropic Python SDK for classification + extraction. Two model names from env vars, never hardcoded: `ANTHROPIC_MODEL_CLASSIFY` (cheap; classifies every document and reads the small non-NDA field sets) and `ANTHROPIC_MODEL_EXTRACT` (NDA fields). Use structured/JSON outputs validated by Pydantic
 * Next.js + TypeScript + Tailwind for the review dashboard
 * Docker Compose for local dev; GitHub Actions for CI
 * pytest (backend), Playwright (frontend E2E)

@@ -229,7 +229,7 @@ You need [uv](https://docs.astral.sh/uv/), Node 22 and Docker Desktop.
 
 ```bash
 git clone https://github.com/<your-username>/lexintake.git && cd lexintake
-cp .env.example .env          # then fill in ANTHROPIC_API_KEY / ANTHROPIC_MODEL (needed from Phase 3)
+cp .env.example .env          # then fill in ANTHROPIC_API_KEY, ANTHROPIC_MODEL_CLASSIFY, ANTHROPIC_MODEL_EXTRACT (Phase 3)
 make install                  # uv creates backend/.venv with Python 3.12; npm installs the frontend
 ```
 
