@@ -1,0 +1,78 @@
+# Slow tests: real Docling parsing (layout model + OCR) on synthetic fixtures, inside the same
+# worker image that ships. They take minutes, not seconds, so they don't run on every push:
+#   - PRs and pushes to main that touch parsing, intake, the worker image or its dependencies
+#   - every night (catches drift: base image, models, a dependency bump in another PR)
+#   - on demand (Actions tab -> "Slow tests" -> Run workflow)
+name: Slow tests
+
+on:
+  pull_request:
+    paths:
+      - backend/app/parsing/**
+      - backend/app/tasks/**
+      - backend/app/intake.py
+      - backend/app/models.py
+      - backend/alembic/**
+      - backend/Dockerfile
+      - backend/pyproject.toml
+      - backend/uv.lock
+      - backend/tests/integration/**
+      - backend/tests/fixtures/**
+      - docker-compose.yml
+      - .github/workflows/slow-tests.yml
+  push:
+    branches: [main]
+    paths: # same list as above
+      - backend/app/parsing/**
+      - backend/app/tasks/**
+      - backend/app/intake.py
+      - backend/app/models.py
+      - backend/alembic/**
+      - backend/Dockerfile
+      - backend/pyproject.toml
+      - backend/uv.lock
+      - backend/tests/integration/**
+      - backend/tests/fixtures/**
+      - docker-compose.yml
+      - .github/workflows/slow-tests.yml
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slow-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docling:
+    name: Docling integration tests (worker image)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the worker-test image (shares the worker's cached layers)
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          files: docker-compose.yml
+          targets: worker-test
+          load: true
+          set: |
+            worker-test.cache-from=type=gha,scope=worker
+            worker-test.cache-to=type=gha,scope=worker,mode=max
+
+      - name: Start Postgres
+        run: docker compose up --detach --wait db
+
+      - name: Run the slow tests
+        run: docker compose --profile test run --rm worker-test
+
+      - name: Stop
+        if: always()
+        run: docker compose down --volumes

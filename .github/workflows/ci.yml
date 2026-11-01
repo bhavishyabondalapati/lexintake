@@ -19,6 +19,23 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # Real Postgres for the DB tests (JSONB, ON CONFLICT and advisory locks need it).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: lexintake
+          POSTGRES_PASSWORD: change-me # throwaway CI database, not a secret
+          POSTGRES_DB: lexintake
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lexintake"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://lexintake:change-me@localhost:5432/lexintake_test
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +46,8 @@ jobs:
           cache-dependency-glob: backend/uv.lock
 
       - name: Install dependencies
-        # --locked fails if uv.lock is out of date with pyproject.toml.
+        # --locked fails if uv.lock is out of date with pyproject.toml. No `parse` group, so no
+        # torch/Docling download: the fast tests use a fake parser.
         run: uv sync --locked
 
       - name: Lint
@@ -37,7 +55,7 @@ jobs:
           uv run ruff check . ../scripts
           uv run ruff format --check . ../scripts
 
-      - name: Test
+      - name: Test (fast; slow Docling tests run in slow-tests.yml)
         run: uv run pytest
 
       - name: requirements.txt matches uv.lock
@@ -70,21 +88,59 @@ jobs:
   compose:
     name: Docker Compose smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build images (cached)
+        # Layer cache in GitHub Actions: torch and the Docling models only rebuild when uv.lock
+        # or the Dockerfile changes. A normal commit only rebuilds the small `COPY app` layers.
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          files: docker-compose.yml
+          targets: api,worker,frontend
+          load: true
+          set: |
+            api.cache-from=type=gha,scope=api
+            api.cache-to=type=gha,scope=api,mode=max
+            worker.cache-from=type=gha,scope=worker
+            worker.cache-to=type=gha,scope=worker,mode=max
+            frontend.cache-from=type=gha,scope=frontend
+            frontend.cache-to=type=gha,scope=frontend,mode=max
+
       - name: Start the stack
         # --wait blocks until every service with a healthcheck reports healthy.
-        run: docker compose up --build --detach --wait --wait-timeout 300
+        run: |
+          mkdir -p inbox && chmod 777 inbox  # the watcher runs as uid 1000
+          docker compose up --no-build --detach --wait --wait-timeout 300
 
       - name: Check API and frontend respond
         run: |
           curl --fail --silent http://localhost:8000/health
           curl --fail --silent --output /dev/null http://localhost:3000
 
-      - name: Worker logs
+      - name: Upload a PDF, wait for the worker to parse it, re-upload as a duplicate
+        run: python3 scripts/compose_smoke.py --api http://localhost:8000
+
+      - name: The api image must not contain Docling or torch
+        run: |
+          if docker compose exec -T api python -c "import docling" 2>/dev/null; then
+            echo "::error::docling is importable in the api image" && exit 1
+          fi
+          if docker compose exec -T api python -c "import torch" 2>/dev/null; then
+            echo "::error::torch is importable in the api image" && exit 1
+          fi
+
+      - name: Image sizes
         if: always()
-        run: docker compose logs worker
+        run: docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep lexintake
+
+      - name: Logs
+        if: always()
+        run: docker compose logs migrate worker watcher api
 
       - name: Stop the stack
         if: always()
