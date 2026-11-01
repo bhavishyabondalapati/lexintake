@@ -19,6 +19,8 @@ certifi==2026.10.23
     # via
     #   httpcore
     #   httpx
+charset-normalizer==3.5.2
+    # via reportlab
 click==8.5.0
     # via
     #   celery
@@ -34,6 +36,7 @@ click-repl==0.4.1
     # via celery
 colorama==0.4.6 ; sys_platform == 'win32'
     # via pytest
+faker==40.44.0
 fastapi==0.162.0
     # via lexintake-backend
 h11==0.16.0
@@ -53,12 +56,15 @@ iniconfig==2.3.1
     # via pytest
 kombu==5.6.2
     # via celery
+numpy==2.5.4
 opentelemetry-api==1.45.2
     # via fastapi
 packaging==26.3
     # via
     #   kombu
     #   pytest
+pillow==13.0.0
+    # via reportlab
 pluggy==1.7.0
     # via pytest
 prompt-toolkit==3.0.53
@@ -73,6 +79,7 @@ pydantic-settings==2.16.2
     # via lexintake-backend
 pygments==2.21.0
     # via pytest
+pypdfium2==5.14.0
 pytest==9.2.0
 python-dateutil==3.0.0
     # via celery
@@ -86,6 +93,7 @@ pyyaml==6.0.3
     #   uvicorn
 redis==6.4.0
     # via kombu
+reportlab==5.1.0
 ruff==0.17.3
 six==1.17.0
     # via python-dateutil
@@ -109,6 +117,7 @@ typing-inspection==0.4.4
     #   pydantic-settings
 tzdata==2026.6
     # via
+    #   faker
     #   kombu
     #   python-dateutil
     #   tzlocal

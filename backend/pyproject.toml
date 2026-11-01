@@ -12,9 +12,16 @@ dependencies = [
 ]
 
 [dependency-groups]
+# Dev-only: tests, linting, and the data scripts in ../scripts (faker, reportlab, pypdfium2,
+# pillow, numpy). The Docker image installs with --no-dev, so none of these ship in it.
 dev = [
+    "faker>=40.44.0",
     "httpx>=0.28.1",
+    "numpy>=2.5.4",
+    "pillow>=13.0.0",
+    "pypdfium2>=5.14.0",
     "pytest>=9.2.0",
+    "reportlab>=5.1.0",
     "ruff>=0.17.3",
 ]
 
