@@ -692,6 +692,8 @@ Coming in Phase 7.
   40 s instead of ~6 s. Running the OCR pass on just the scanned pages (Docling's `page_range`)
   would fix it.
 - **OCR occasionally drops whole lines** (see Results). Confidence scores don't reveal it.
+- **The deskew result only covers mild tilt.** The synthetic scans are rotated at most 2.5°;
+  real mailroom scans can be tilted much more, where deskewing may well pay off.
 - **The worker image is big (~2.8 GB on arm64, 4.3 GB on amd64).** Most of it is torch
   (CPU-only) and 730 MB of models.
   It's built once and cached; only the small app layer changes between commits.
