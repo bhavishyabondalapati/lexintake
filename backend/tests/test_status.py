@@ -3,7 +3,7 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.models import AuditLog, Document, Status
-from app.status import InvalidTransition, transition
+from app.status import ALLOWED, InvalidTransition, transition
 
 pytestmark = pytest.mark.db
 
@@ -44,8 +44,14 @@ def test_transition_refuses_a_jump_that_is_not_allowed(db):
         assert doc.status == Status.RECEIVED
 
 
-def test_parsed_is_final_in_phase_2(db):
+def test_parsed_moves_on_to_extracting_and_never_back_to_parsing(db):
     with session_scope() as session:
         doc = _doc(session, Status.PARSED)
         with pytest.raises(InvalidTransition):
             transition(session, doc, Status.PARSING, "test")
+        transition(session, doc, Status.EXTRACTING, "test")
+        transition(session, doc, Status.NEEDS_REVIEW, "test")
+
+
+def test_every_status_has_a_rule():
+    assert set(ALLOWED) == set(Status)

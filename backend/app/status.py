@@ -7,13 +7,24 @@ from sqlalchemy.orm import Session
 
 from app.models import AuditLog, Document, Status
 
-# Which status can follow which. `parsing -> parsing` is a redelivery after a worker crash, and
-# `failed -> parsing` is a manual requeue.
+# Which status can follow which. `parsing -> parsing` and `extracting -> extracting` are
+# redeliveries after a worker crash. `failed -> parsing | extracting` is a manual requeue of the
+# step that failed. `extracting -> parsed` hands a document back untouched when the spend cap
+# stops a run. `extracted | needs_review -> extracting` is a deliberate re-run (`--force`).
 ALLOWED: dict[Status, set[Status]] = {
     Status.RECEIVED: {Status.PARSING, Status.FAILED},
     Status.PARSING: {Status.PARSING, Status.PARSED, Status.FAILED},
-    Status.FAILED: {Status.PARSING},
-    Status.PARSED: set(),
+    Status.PARSED: {Status.EXTRACTING},
+    Status.EXTRACTING: {
+        Status.EXTRACTING,
+        Status.EXTRACTED,
+        Status.NEEDS_REVIEW,
+        Status.FAILED,
+        Status.PARSED,
+    },
+    Status.EXTRACTED: {Status.EXTRACTING},
+    Status.NEEDS_REVIEW: {Status.EXTRACTING},
+    Status.FAILED: {Status.PARSING, Status.EXTRACTING},
 }
 
 
