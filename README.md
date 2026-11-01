@@ -456,12 +456,14 @@ a 400 MB web server into a multi-GB one that takes longer to build, pull and sta
 
 | Image | Target | Used by | Contains | Size* |
 | --- | --- | --- | --- | --- |
-| `lexintake-api` | `api` | api, watcher, migrate | Python + main dependencies + app | ~440 MB |
-| `lexintake-worker` | `worker` | Celery worker | + Docling, CPU-only torch, RapidOCR, models | ~2.8 GB |
-| `lexintake-worker-test` | `worker-test` | slow tests only | + pytest and the tests | ~2.8 GB |
+| `lexintake-api` | `api` | api, watcher, migrate | Python + main dependencies + app | ~420–440 MB |
+| `lexintake-worker` | `worker` | Celery worker | + Docling, CPU-only torch, RapidOCR, models | ~2.8 GB (arm64) / 4.3 GB (amd64) |
+| `lexintake-worker-test` | `worker-test` | slow tests only | + pytest and the tests | about the same as the worker |
 
-\*Uncompressed, linux/arm64 on a Mac. Of the worker's size, ~1.7 GB is Python packages (torch alone
-is 690 MB) and 730 MB is models.
+\*Uncompressed. arm64 is measured on the Mac (sum of the layers); amd64 is what `docker image ls`
+reports in CI. On arm64, ~1.7 GB of the worker is Python packages (torch alone is 690 MB) and
+730 MB is models. The uv download cache is a BuildKit cache mount, so it never ends up in an image
+(it had added 1.3 GB before that fix).
 
 - **CPU-only torch.** `[tool.uv.sources]` points torch and torchvision at
   `download.pytorch.org/whl/cpu` on Linux, which drops ~5 GB of CUDA libraries. macOS keeps the
@@ -478,9 +480,12 @@ is 690 MB) and 730 MB is models.
 
 | Workflow / job | When | What | Time |
 | --- | --- | --- | --- |
-| `ci.yml` → backend | every push and PR | ruff, fast pytest (fake parser) with a Postgres service; never installs torch | ~1–2 min |
-| `ci.yml` → compose | every push and PR | builds api + worker images with GitHub Actions layer cache, boots the stack, uploads a real PDF, waits for the real worker to parse it, re-uploads it as a duplicate | ~3 min warm, ~10 cold |
-| `slow-tests.yml` | PRs/pushes touching parsing, tasks, intake, models, migrations, Dockerfile, deps, fixtures or integration tests; nightly; manual button | real Docling on digital, scanned, duplicate and corrupt fixtures, inside the worker-test image | a few minutes |
+| `ci.yml` → backend | every push and PR | ruff, fast pytest (fake parser) with a Postgres service; never installs torch | ~45 s |
+| `ci.yml` → compose | every push and PR | builds api + worker images with GitHub Actions layer cache, boots the stack, uploads a real PDF, waits for the real worker to parse it, re-uploads it as a duplicate | ~3 min with cache, ~7 min cold |
+| `slow-tests.yml` | PRs/pushes touching parsing, tasks, intake, models, migrations, Dockerfile, deps, fixtures or integration tests; nightly; manual button | real Docling on digital, scanned, duplicate and corrupt fixtures, inside the worker-test image | ~3.5 min with cache, ~6 min cold |
+
+Times are from the first CI runs of this phase. Most of the "with cache" time is restoring the
+multi-GB worker layers; the tests themselves take ~15 s.
 
 The slow tests are marked `@pytest.mark.slow`, and `pytest` skips them by default
 (`addopts = -m "not slow"`). They run inside the same image that ships, so CPU torch, the baked
@@ -687,7 +692,8 @@ Coming in Phase 7.
   40 s instead of ~6 s. Running the OCR pass on just the scanned pages (Docling's `page_range`)
   would fix it.
 - **OCR occasionally drops whole lines** (see Results). Confidence scores don't reveal it.
-- **The worker image is big (~2.8 GB).** Most of it is torch (CPU-only) and 730 MB of models.
+- **The worker image is big (~2.8 GB on arm64, 4.3 GB on amd64).** Most of it is torch
+  (CPU-only) and 730 MB of models.
   It's built once and cached; only the small app layer changes between commits.
 - **Intermediate commit.** In this phase's history, the upload commit imports a constant from
   `app/worker.py` that only arrives two commits later. The branch tip is fine; bisecting across
