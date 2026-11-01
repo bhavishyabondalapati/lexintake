@@ -14,11 +14,11 @@ test: ## Run all tests
 	cd backend && uv run pytest
 
 lint: ## Lint and typecheck backend and frontend
-	cd backend && uv run ruff check . && uv run ruff format --check .
+	cd backend && uv run ruff check . ../scripts && uv run ruff format --check . ../scripts
 	cd frontend && npm run lint && npm run typecheck
 
 format: ## Auto-format backend code
-	cd backend && uv run ruff check --fix . && uv run ruff format .
+	cd backend && uv run ruff check --fix . ../scripts && uv run ruff format . ../scripts
 
 requirements: ## Regenerate requirements.txt from backend/uv.lock
 	uv export --project backend --frozen --no-hashes --no-emit-project --quiet -o requirements.txt

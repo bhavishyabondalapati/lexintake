@@ -34,8 +34,8 @@ jobs:
 
       - name: Lint
         run: |
-          uv run ruff check .
-          uv run ruff format --check .
+          uv run ruff check . ../scripts
+          uv run ruff format --check . ../scripts
 
       - name: Test
         run: uv run pytest
