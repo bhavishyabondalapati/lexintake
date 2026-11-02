@@ -3,12 +3,13 @@
 import pytest
 from sqlalchemy import func, select
 
-from app.db import session_scope
+from app.config import get_settings
+from app.db import _lock_key, session_scope
 from app.intake import ingest_file
 from app.models import AuditLog, Document, TextBlock
 from app.parsing.base import ParseError
 from app.storage.blobs import LocalBlobStore
-from app.tasks.parse import _lock_key, run_parse
+from app.tasks.parse import run_parse
 from tests.fakes import FakeParser, RecordingQueue
 
 pytestmark = pytest.mark.db
@@ -147,3 +148,30 @@ def test_unknown_document_is_reported_missing(db, blobs):
     import uuid
 
     assert run_parse(uuid.uuid4(), FakeParser(), blobs, max_attempts=3) == "missing"
+
+
+def test_parsed_document_is_queued_for_extraction_only_when_turned_on(
+    doc_id, blobs, make_pdf, monkeypatch
+):
+    queued = RecordingQueue()
+    monkeypatch.setattr("app.tasks.parse.enqueue_extract", queued)
+
+    run_parse(doc_id, FakeParser(), blobs, max_attempts=3)
+    assert queued.queued == []  # EXTRACT_ON_PARSE is off by default: no API spend on upload
+
+    monkeypatch.setenv("EXTRACT_ON_PARSE", "true")
+    get_settings.cache_clear()
+    other = ingest_file(
+        make_pdf(b"second"),
+        "b.pdf",
+        source="upload",
+        actor="test",
+        blobs=blobs,
+        enqueue=RecordingQueue(),
+        max_bytes=10_000,
+    ).document.id
+    try:
+        run_parse(other, FakeParser(), blobs, max_attempts=3)
+    finally:
+        get_settings.cache_clear()
+    assert queued.queued == [other]

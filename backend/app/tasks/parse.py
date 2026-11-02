@@ -11,14 +11,15 @@ import time
 import uuid
 
 from celery.signals import worker_process_init
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import delete, insert
 from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
-from app.db import get_engine, session_scope
+from app.db import document_lock, session_scope
 from app.models import Document, Status, TextBlock
 from app.parsing import get_parser
 from app.parsing.base import Parser
+from app.queue import enqueue_extract
 from app.status import transition
 from app.storage.blobs import BlobStore, LocalBlobStore
 from app.worker import PARSE_TASK, celery_app
@@ -27,11 +28,6 @@ log = logging.getLogger(__name__)
 
 ACTOR = "worker:parse"
 MAX_ERROR_CHARS = 2000
-
-
-def _lock_key(document_id: uuid.UUID) -> int:
-    """Advisory locks take a 64-bit integer; use the first 8 bytes of the uuid."""
-    return int.from_bytes(document_id.bytes[:8], "big", signed=True)
 
 
 def _fail(document_id: uuid.UUID, error: str, detail: dict) -> None:
@@ -43,16 +39,13 @@ def _fail(document_id: uuid.UUID, error: str, detail: dict) -> None:
 
 def run_parse(document_id: uuid.UUID, parser: Parser, blobs: BlobStore, max_attempts: int) -> str:
     """Parse one document. Returns what happened (for logs and tests)."""
-    with get_engine().connect() as lock_conn:
-        got_lock = lock_conn.scalar(select(func.pg_try_advisory_lock(_lock_key(document_id))))
-        lock_conn.commit()  # a session-level lock outlives the transaction; don't sit in one
+    with document_lock(document_id) as got_lock:
         if not got_lock:
-            return "locked"  # another worker is parsing this document right now
-        try:
-            return _parse_locked(document_id, parser, blobs, max_attempts)
-        finally:
-            lock_conn.scalar(select(func.pg_advisory_unlock(_lock_key(document_id))))
-            lock_conn.commit()
+            return "locked"  # another worker is working on this document right now
+        result = _parse_locked(document_id, parser, blobs, max_attempts)
+    if result == "parsed" and get_settings().extract_on_parse:
+        enqueue_extract(document_id)
+    return result
 
 
 def _parse_locked(

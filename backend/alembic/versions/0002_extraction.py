@@ -55,7 +55,7 @@ def upgrade() -> None:
         "extractions",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("document_id", sa.Uuid(), nullable=False),
-        sa.Column("doc_type", sa.String(length=30), nullable=False),
+        sa.Column("doc_type", sa.String(length=30), nullable=True),
         sa.Column("doc_subtype", sa.String(length=30), nullable=True),
         sa.Column("classification", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("fields", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -95,6 +95,7 @@ def upgrade() -> None:
         sa.Column("outcome", sa.String(length=20), nullable=False),
         sa.Column("error", sa.Text(), nullable=True),
         sa.Column("request_id", sa.String(length=100), nullable=True),
+        sa.Column("raw_output", sa.Text(), nullable=True),
         sa.Column("latency_ms", sa.Integer(), nullable=False),
         sa.Column(
             "created_at",

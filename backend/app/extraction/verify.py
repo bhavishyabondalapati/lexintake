@@ -84,6 +84,8 @@ class FieldCheck:
     def to_json(self) -> dict[str, Any]:
         out = asdict(self)
         out.pop("name")
+        if isinstance(self.value, date):
+            out["value"] = self.value.isoformat()  # JSONB has no date type
         return out
 
 
