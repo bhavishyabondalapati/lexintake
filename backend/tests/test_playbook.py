@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.playbook import Playbook, Rule, evaluate, load_playbook
+from app.playbook import Playbook, Rule, check_playbook, evaluate, load_playbook
 
 STANDARD_NDA = {
     "term_months": 24,
@@ -72,3 +72,79 @@ def test_duplicate_rule_ids_are_rejected():
 
     with pytest.raises(ValidationError):
         Playbook(version=1, document_type="nda", rules=[rule, rule])
+
+
+# --- check_playbook: pass / deviation / unknown with evidence -----------------------------------
+
+
+
+def _entries(values: dict) -> dict:
+    return {
+        k: {
+            "value": v,
+            "status": "verified" if v is not None else "absent",
+            "page": 1,
+            "quote": f"quote for {k}" if v is not None else None,
+        }
+        for k, v in values.items()
+    }
+
+
+def _outcomes(extracted: dict) -> dict[str, str]:
+    return {r.rule_id: r.outcome for r in check_playbook(load_playbook(), extracted)}
+
+
+def test_checker_standard_nda_all_pass():
+    assert set(_outcomes(_entries(STANDARD_NDA)).values()) == {"pass"}
+
+
+@pytest.mark.parametrize(
+    ("change", "broken_rule"),
+    [
+        ({"term_months": 36}, "max_term"),
+        ({"governing_law": "California"}, "governing_law_allowed"),
+        ({"non_solicit_months": 18}, "non_solicit_max"),
+        ({"non_compete_months": 6}, "no_non_compete"),
+        ({"residuals_clause": True}, "no_residuals"),
+        ({"return_destroy_days": None}, "return_destroy_required"),
+    ],
+)
+def test_checker_deviation_carries_evidence(change, broken_rule):
+    results = check_playbook(load_playbook(), _entries(STANDARD_NDA | change))
+    deviations = [r for r in results if r.outcome == "deviation"]
+
+    assert [r.rule_id for r in deviations] == [broken_rule]
+    assert deviations[0].reason
+    if broken_rule != "return_destroy_required":  # an absent clause has no quote to show
+        assert deviations[0].page == 1 and deviations[0].quote
+
+
+@pytest.mark.parametrize("status", ["unverified", "missing"])
+def test_unverified_or_missing_field_is_unknown_never_pass(status):
+    extracted = _entries(STANDARD_NDA)
+    extracted["term_months"] = {"value": 12, "status": status, "page": 1, "quote": "x"}
+
+    assert _outcomes(extracted)["max_term"] == "unknown"
+
+
+def test_field_not_extracted_is_unknown():
+    extracted = _entries(STANDARD_NDA)
+    del extracted["governing_law"]
+
+    assert _outcomes(extracted)["governing_law_allowed"] == "unknown"
+
+
+def test_absent_but_mentioned_and_value_not_in_quote_are_unknown():
+    extracted = _entries(STANDARD_NDA)
+    extracted["non_compete_months"]["flags"] = ["absent_but_mentioned"]
+    extracted["term_months"]["value_in_quote"] = False
+
+    outcomes = _outcomes(extracted)
+    assert outcomes["no_non_compete"] == "unknown"
+    assert outcomes["max_term"] == "unknown"
+
+
+def test_null_governing_law_is_unknown():
+    assert _outcomes(_entries(STANDARD_NDA | {"governing_law": None}))["governing_law_allowed"] == (
+        "unknown"
+    )
