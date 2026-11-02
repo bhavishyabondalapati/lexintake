@@ -21,7 +21,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -43,7 +43,7 @@ from app.extraction.base import (
     plan_extract,
 )
 from app.extraction.doctext import DocText, load_doc_text
-from app.extraction.pricing import SpendGuard, worst_case_usd
+from app.extraction.pricing import SpendGuard
 from app.extraction.route import classification_reasons
 from app.extraction.run import Outcome, RunContext, run_extraction
 from app.extraction.schemas import Classification
@@ -53,10 +53,9 @@ from app.models import LlmStep
 log = logging.getLogger(__name__)
 
 BATCH_PRICE_FACTOR = Decimal("0.5")
-# The spend cap is checked against a bound that assumes a call writes at most this many output
-# tokens (about 3x what the preview runs showed: classify ~60, NDA extract ~850, other ~450).
-# Checking against max_tokens would refuse any sensible run: 8,000 output tokens per NDA is not
-# what these models write for a 10-field JSON answer. `plan-only` prints both numbers.
+# Batch requests are sent with max_tokens cut to these bounds (about 3x what the preview runs
+# showed: classify ~60, NDA extract ~850, other ~450), so the cost bound is a true worst case. A
+# response that hits the limit is routed to needs_review as "truncated".
 OUTPUT_BOUND = {"classify": 400, "extract_nda": 2_500, "extract_other": 1_200}
 POLL_SECONDS = 30
 
@@ -82,6 +81,15 @@ class ReplayExtractor:
         if isinstance(answer, LlmCallFailed):
             raise answer
         return answer
+
+
+def bounded(plan: CallPlan) -> CallPlan:
+    """The plan with max_tokens cut to the batch bound for its step."""
+    if plan.step == LlmStep.CLASSIFY:
+        bound = OUTPUT_BOUND["classify"]
+    else:
+        bound = OUTPUT_BOUND["extract_nda" if plan.max_tokens > 3_000 else "extract_other"]
+    return replace(plan, max_tokens=min(plan.max_tokens, bound))
 
 
 def custom_id(document_id: uuid.UUID, step: LlmStep) -> str:
@@ -191,7 +199,8 @@ class BatchRunner:
         with session_scope() as session:
             docs = {i: load_doc_text(session, i) for i in document_ids}
         classify = {
-            custom_id(i, LlmStep.CLASSIFY): plan_classify(self.settings, d) for i, d in docs.items()
+            custom_id(i, LlmStep.CLASSIFY): bounded(plan_classify(self.settings, d))
+            for i, d in docs.items()
         }
         self._check_spend(classify.values(), max_spend, "classify")
         results = BatchResults()
@@ -205,8 +214,8 @@ class BatchRunner:
             check = check_classification(d, c.output)
             if classification_reasons(self.settings, c.output, check, nda_signals(d)):
                 continue  # the type is in doubt: don't pay for step 2
-            extract[custom_id(i, LlmStep.EXTRACT)] = plan_extract(
-                self.settings, d, c.output.doc_type, c.output.subtype
+            extract[custom_id(i, LlmStep.EXTRACT)] = bounded(
+                plan_extract(self.settings, d, c.output.doc_type, c.output.subtype)
             )
         self._check_spend(extract.values(), max_spend, "extract")
         if extract:
@@ -246,30 +255,23 @@ class BatchRunner:
 
 
 def budget_bound(plan: CallPlan) -> Decimal:
-    """What a call can cost at batch prices if it writes up to OUTPUT_BOUND tokens."""
-    if plan.step == LlmStep.CLASSIFY:
-        bound = OUTPUT_BOUND["classify"]
-    else:
-        bound = OUTPUT_BOUND["extract_nda" if plan.max_tokens > 3_000 else "extract_other"]
-    return worst_case_usd(plan.model, plan.estimated_input_tokens, min(plan.max_tokens, bound)) * (
-        BATCH_PRICE_FACTOR
-    )
+    """The most a (bounded) call can cost at batch prices: all input uncached, max_tokens out."""
+    return plan.worst_case_usd * BATCH_PRICE_FACTOR
 
 
-def cost_estimates(settings: Settings, docs: dict[uuid.UUID, DocText]) -> dict[str, Decimal]:
-    """For `--plan-only`, assuming every document is an NDA (the most expensive type): the budget
-    bound used for the spend cap, and the hard worst case where every call fills max_tokens."""
+def cost_estimates(settings: Settings, docs: dict[uuid.UUID, DocText]) -> Decimal:
+    """For `--plan-only`: the worst case at batch prices if every document were an NDA (the most
+    expensive type). It is the same number the spend cap is checked against."""
     from app.extraction.schemas import DocType
 
-    plans = [
-        p
-        for d in docs.values()
-        for p in (plan_classify(settings, d), plan_extract(settings, d, DocType.NDA, None))
-    ]
-    return {
-        "budget_bound": sum((budget_bound(p) for p in plans), Decimal(0)),
-        "hard_worst_case": sum((p.worst_case_usd for p in plans), Decimal(0)) * BATCH_PRICE_FACTOR,
-    }
+    return sum(
+        (
+            budget_bound(bounded(p))
+            for d in docs.values()
+            for p in (plan_classify(settings, d), plan_extract(settings, d, DocType.NDA, None))
+        ),
+        Decimal(0),
+    )
 
 
 def _outcome(raw: dict) -> dict:

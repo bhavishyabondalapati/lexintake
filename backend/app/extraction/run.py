@@ -187,7 +187,7 @@ class _Step:
         result = self._call(plan_classify(settings, doc))
         if result.outcome != LlmOutcome.OK:
             extraction.classification = {"error": result.error, "outcome": result.outcome}
-            reason = Reason(result.outcome.value, "classification", result.error or "")
+            reason = _failure_reason(result, "classification")
             return [*reasons, reason], extraction
         c = result.output
         assert isinstance(c, Classification)
@@ -210,7 +210,7 @@ class _Step:
         # Extract (NDA: strong model; everything else: the cheap model, small field set).
         result = self._call(plan_extract(settings, doc, c.doc_type, c.subtype))
         if result.outcome != LlmOutcome.OK:
-            return [*reasons, Reason(result.outcome.value, None, result.error or "")], extraction
+            return [*reasons, _failure_reason(result, None)], extraction
         assert isinstance(result.output, CitedFields)
         checks = check_fields(doc, result.output, c.doc_type)
         extraction.fields = {check.name: check.to_json() for check in checks}
@@ -278,6 +278,13 @@ class _Step:
                     latency_ms=result.latency_ms if result else 0,
                 )
             )
+
+
+def _failure_reason(result: LlmResult, field: str | None) -> Reason:
+    """An answer that was cut off at max_tokens is "truncated"; any other unusable answer is
+    named after its outcome."""
+    code = "truncated" if result.stop_reason == "max_tokens" else result.outcome.value
+    return Reason(code, field, result.error or "")
 
 
 def _finish(

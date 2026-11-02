@@ -2,12 +2,14 @@
 extractor's output, so the checks and routing run for real."""
 
 import json
+import uuid
 from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
 
+from app.cli import truncated_count
 from app.config import Settings
 from app.db import session_scope
 from app.extraction.batch import BatchRunner, split_custom_id
@@ -30,8 +32,9 @@ ENTRIES = {NDA["doc_id"]: NDA, SIDE_LETTER["doc_id"]: SIDE_LETTER}
 class StubBatches:
     """Remembers what was submitted; answers each request the way the fake extractor would."""
 
-    def __init__(self, entry_for, reject_grammar=False, errors=()):
+    def __init__(self, entry_for, reject_grammar=False, errors=(), truncate=()):
         self.entry_for, self.reject_grammar, self.errors = entry_for, reject_grammar, set(errors)
+        self.truncate = set(truncate)
         self.created: list[list[dict]] = []
         self.polls = 0
 
@@ -60,7 +63,14 @@ class StubBatches:
                 "error": {"error": {"message": "The compiled grammar is too large"}},
             }
         else:
-            result = {"type": "succeeded", "message": self._message(document_id, step)}
+            message = self._message(document_id, step)
+            if cid in self.truncate:  # the model ran out of tokens mid-JSON
+                text = message["content"][0]["text"]
+                message |= {
+                    "stop_reason": "max_tokens",
+                    "content": [{"type": "text", "text": text[:40]}],
+                }
+            result = {"type": "succeeded", "message": message}
         return SimpleNamespace(custom_id=cid, model_dump=lambda mode=None: {"result": result})
 
     def _message(self, document_id, step):
@@ -164,3 +174,22 @@ def test_a_stopped_run_resumes_without_submitting_again(db, tmp_path):
     assert outcomes[ids["syn_00010"]].result == "auto_approved"
     saved = json.loads((tmp_path / "batch" / "state.json").read_text())
     assert saved["classify"] == "batch_1"
+
+
+def test_batch_requests_are_bounded_and_a_truncated_answer_goes_to_review(db, tmp_path):
+    ids, by_id = prepare()
+    nda = ids["syn_00010"]
+    stub = StubBatches(by_id.get, truncate=[f"{nda}:extract"])
+    run_id = uuid.uuid4()
+
+    outcomes = runner(tmp_path, stub).run(list(ids.values()), Decimal("5"), run_id)
+
+    classify, extract = stub.created
+    assert {r["params"]["max_tokens"] for r in classify} == {400}
+    sent = {r["custom_id"]: r["params"]["max_tokens"] for r in extract}
+    assert sent[f"{nda}:extract"] == 2_500  # NDA fields
+    assert sent[f"{ids['syn_00002']}:extract"] == 1_200  # the small field set of another type
+
+    assert outcomes[nda].result == "needs_review"
+    assert [r.code for r in outcomes[nda].reasons] == ["truncated"]
+    assert truncated_count(run_id) == 1  # what the CLI report prints

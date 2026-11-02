@@ -125,6 +125,15 @@ def cost_table(run_id: uuid.UUID) -> list[dict]:
     return [dict(zip([*keys, "cost_usd"], row, strict=True)) for row in rows]
 
 
+def truncated_count(run_id: uuid.UUID) -> int:
+    with session_scope() as session:
+        return session.scalar(
+            select(func.count(func.distinct(LlmCall.document_id))).where(
+                LlmCall.run_id == run_id, LlmCall.stop_reason == "max_tokens"
+            )
+        )
+
+
 def _print_run(run: ExtractRun) -> None:
     counts: dict[str, int] = {}
     for result in run.results.values():
@@ -143,6 +152,7 @@ def _print_run(run: ExtractRun) -> None:
             f"{r['cost_usd']:>10.6f}"
         )
     print(f"total spent: ${run.spent:.6f}")
+    print(f"truncated (hit max_tokens, sent to review): {truncated_count(run.run_id)}")
 
 
 def run_batch_cli(settings: Settings, args: argparse.Namespace) -> None:
@@ -158,12 +168,10 @@ def run_batch_cli(settings: Settings, args: argparse.Namespace) -> None:
     if args.plan_only:
         with session_scope() as session:
             docs = {i: load_doc_text(session, i) for i in ids}
-        est = cost_estimates(settings, docs)
         print(
-            f"{len(ids)} documents, every one counted as an NDA (the most expensive type), batch "
-            f"prices:\n  budget bound (what --max-spend is checked against): "
-            f"${est['budget_bound']:.4f}\n  hard worst case (every call fills max_tokens, which "
-            f"these models don't do): ${est['hard_worst_case']:.4f}"
+            f"{len(ids)} documents, every one counted as an NDA (the most expensive type). Worst "
+            f"case at batch prices, with max_tokens cut to the batch bounds: "
+            f"${cost_estimates(settings, docs):.4f} (this is what --max-spend is checked against)"
         )
         return
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
