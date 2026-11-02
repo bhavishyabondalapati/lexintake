@@ -25,9 +25,9 @@ test("queue -> needs_review NDA -> see the deviation -> approve", async ({ page 
 
   await expect(page.getByLabel("Review").getByText("Approved", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve" })).toBeDisabled();
-  await expect(page.getByText("reviewer needs_review → approved")).toBeVisible();
+  await expect(page.getByText("reviewer needs_review → approved").last()).toBeVisible();
 
   // It left the review queue.
   await page.getByRole("link", { name: "← Queue" }).click();
-  await expect(page.getByText("angle_brackets_nda.pdf")).toHaveCount(0);
+  await expect(page.getByRole("table").getByText("angle_brackets_nda.pdf")).toHaveCount(0);
 });

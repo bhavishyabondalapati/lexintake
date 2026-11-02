@@ -749,7 +749,10 @@ field to see its evidence on the PDF.
 - **Limits.** There is no login yet, so every action is recorded as the actor `reviewer`.
   Approved documents are not filed anywhere (Phase 5, storage, is skipped for now).
 
-**Demo data.** `make seed-demo` uploads a few PDFs (the committed fixtures, plus some synthetic
+**Screenshots** show the real preview run: 20 synthetic documents extracted by the real models
+(Haiku for classification and the small field sets, Sonnet for NDAs).
+
+**Demo data without the API.** `make seed-demo` uploads a few PDFs (the committed fixtures, plus some synthetic
 NDAs if `data/synthetic/` exists), lets the worker parse them, and "extracts" them with the **fake
 extractor**, which answers from the manifest. The screens show real parsing and real playbook
 checks, but the extraction is not a model's work, and no API is called. Running it again resets
@@ -762,7 +765,21 @@ Chrome and a different port.)
 
 ## Evaluation results
 
-Coming in Phase 7.
+**Phase 3/4 preview (20 synthetic documents, real models, `make extract-preview`).** A small
+sample, not a benchmark. Full report: `data/reports/extract_preview.md` (not committed).
+
+| | Digital | Scanned | All |
+|---|---|---|---|
+| Document type correct | 14/14 | 6/6 | 20/20 |
+| Field exact match | 103/104 | 41/41 | 144/145 |
+| NDA playbook result equals the manifest | 6/6 | 2/2 | 8/8 |
+
+The one wrong field is a newsletter's publisher name. 12 of 20 documents went to review: 3 out of
+scope, 1 suspected prompt injection, 4 real playbook deviations, and the rest because the model's
+confidence on a field was below the threshold even though the answer was right. Cost: $0.0078 per
+document on average ($0.019 per NDA with Sonnet, $0.0003 for the others with Haiku).
+
+Full evaluation (ContractNLI, the 500-document manifest) comes in Phase 7.
 
 ## How it was built
 

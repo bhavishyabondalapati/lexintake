@@ -99,11 +99,16 @@ export function Queue() {
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex flex-wrap gap-1.5">
-                    {d.flags.map((f) => (
+                    {d.flags.slice(0, 3).map((f) => (
                       <span key={f.label} className={`rounded px-1.5 py-0.5 text-xs ${FLAG_STYLE[f.kind]}`}>
                         {f.label}
                       </span>
                     ))}
+                    {d.flags.length > 3 && (
+                      <span className="px-1 py-0.5 text-xs text-zinc-400" title={d.flags.slice(3).map((f) => f.label).join(", ")}>
+                        +{d.flags.length - 3} more
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-2.5 text-right text-zinc-500 tabular-nums">

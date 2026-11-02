@@ -246,6 +246,9 @@ def approve(document_id: uuid.UUID, session: Annotated[Session, Depends(get_sess
         transition(session, doc, Status.APPROVED, ACTOR, {"event": "approve"})
     except InvalidTransition as e:  # pragma: no cover - guarded above
         raise HTTPException(409, str(e)) from e
+    # Commit before answering: the session dependency would only commit after the response is
+    # sent, and the page asks for the document again the moment it gets the answer.
+    session.commit()
     return doc
 
 
@@ -292,5 +295,5 @@ def override(
         from_status=doc.status,
         to_status=doc.status,
     )
-    session.flush()
+    session.commit()
     return detail(document_id, session)
