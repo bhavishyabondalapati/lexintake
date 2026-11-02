@@ -33,6 +33,7 @@ class Status(StrEnum):
     EXTRACTED = "extracted"  # every extraction check passed (NDAs: playbook check comes next)
     NEEDS_REVIEW = "needs_review"  # a check failed; the reasons are in extractions.review_reasons
     AUTO_APPROVED = "auto_approved"  # an NDA that passed every check and every playbook rule
+    APPROVED = "approved"  # a person looked at it and approved it
     FAILED = "failed"
 
 

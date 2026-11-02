@@ -23,8 +23,14 @@ ALLOWED: dict[Status, set[Status]] = {
         Status.FAILED,
         Status.PARSED,
     },
-    Status.EXTRACTED: {Status.EXTRACTING, Status.AUTO_APPROVED, Status.NEEDS_REVIEW},
-    Status.NEEDS_REVIEW: {Status.EXTRACTING},
+    Status.EXTRACTED: {
+        Status.EXTRACTING,
+        Status.AUTO_APPROVED,
+        Status.NEEDS_REVIEW,
+        Status.APPROVED,
+    },
+    Status.NEEDS_REVIEW: {Status.EXTRACTING, Status.APPROVED},
+    Status.APPROVED: {Status.EXTRACTING},
     Status.AUTO_APPROVED: {Status.EXTRACTING},
     Status.FAILED: {Status.PARSING, Status.EXTRACTING},
 }

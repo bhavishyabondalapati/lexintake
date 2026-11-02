@@ -53,7 +53,7 @@ log = logging.getLogger(__name__)
 
 MAX_OUTPUT_ATTEMPTS = 2  # invalid output: retry once, then needs_review
 MAX_ERROR_CHARS = 2000
-RERUNNABLE = {Status.EXTRACTED, Status.NEEDS_REVIEW, Status.AUTO_APPROVED}
+RERUNNABLE = {Status.EXTRACTED, Status.NEEDS_REVIEW, Status.AUTO_APPROVED, Status.APPROVED}
 
 
 @dataclass

@@ -105,7 +105,7 @@ def _untrusted_reason(entry: dict[str, Any] | None) -> str | None:
         return "the quote for this field was not found in the document"
     if status == "missing":
         return "a required field was left empty"
-    if status not in ("verified", "absent"):
+    if status not in ("verified", "absent", "overridden"):
         return f"unrecognised field status {status!r}"
     if status == "verified" and entry.get("value_in_quote") is False:
         return "the value does not appear in its quote"

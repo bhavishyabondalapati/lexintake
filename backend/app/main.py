@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import documents
+from app.routes import documents, review
 
 
 def create_app() -> FastAPI:
@@ -24,6 +24,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(documents.router)
+    app.include_router(review.router)
     return app
 
 
