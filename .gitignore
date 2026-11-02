@@ -35,3 +35,4 @@ playwright-report/
 # Local runtime folders (inbox for the folder watcher, blob store outside Docker)
 inbox/
 backend/.blobs/
+frontend/public/pdf.worker.min.mjs

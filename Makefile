@@ -1,4 +1,4 @@
-.PHONY: dev down install test test-slow smoke requeue lint format requirements data data-cuad synthetic playbook-truth \
+.PHONY: dev down install test test-slow smoke requeue lint format requirements data data-cuad synthetic playbook-truth seed-demo \
 	parse-quality ingest-smoke extract extract-preview eval
 
 dev: ## Start the whole stack (db, redis, migrate, api, watcher, worker, extractor, frontend)
@@ -43,6 +43,9 @@ data-cuad: ## Same as data, plus the optional CUAD dataset (106 MB)
 
 synthetic: ## Generate 500 synthetic documents + manifest into data/synthetic/ (seed 42)
 	PYTHONPATH=backend uv run --project backend python -m scripts.generate_synthetic
+
+seed-demo: ## Fill the running stack with demo documents for the review screens (fake extractor, no API)
+	PYTHONPATH=backend:. uv run --project backend python -m scripts.seed_demo
 
 playbook-truth: ## Check the playbook checker against the full synthetic manifest (free)
 	PYTHONPATH=backend:. uv run --project backend python -m scripts.playbook_ground_truth
