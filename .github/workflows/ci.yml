@@ -134,6 +134,14 @@ jobs:
             echo "::error::torch is importable in the api image" && exit 1
           fi
 
+      - name: Review page end-to-end test (demo data from the fake extractor, no API)
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          export PATH="$HOME/.local/bin:$PATH"
+          (cd backend && uv sync --frozen)
+          PYTHONPATH=backend:. backend/.venv/bin/python -m scripts.seed_demo
+          cd frontend && npm ci && npx playwright install --with-deps chromium && npm run e2e
+
       - name: Image sizes
         if: always()
         run: docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep lexintake

@@ -53,7 +53,7 @@ Phase 0 builds the boxes that hold everything up: FastAPI, the Celery worker, Re
 with pgvector, and the Next.js app, all running together in Docker Compose. Phase 2 adds intake
 and parsing (below). Phase 3 adds classification, extraction and the citation checks
 ([Classification & extraction](#classification--extraction-phase-3)). Phase 4 checks NDAs against
-the playbook ([Playbook check](#playbook-check-phase-4)). Filing and the review UI come in Phases 5–6.
+the playbook ([Playbook check](#playbook-check-phase-4)). The minimal review page is Phase 6 ([Review page](#review-page-phase-6-minimal)); filing (Phase 5) is skipped for now.
 
 ### Ingestion and parsing (Phase 2)
 
@@ -147,6 +147,7 @@ lexintake/
 │   ├── __init__.py               # Makes scripts/ importable (tests, python -m)
 │   ├── download_data.py          # Downloads ContractNLI (+ CUAD), checks SHA-256, safe to re-run
 │   ├── compose_smoke.py          # Upload → wait for parsed → re-upload as duplicate → run the playbook checker in the containers
+│   ├── seed_demo.py              # Demo documents for the review screens (fake extractor, no API)
 │   ├── playbook_ground_truth.py  # Checker output vs the manifest's deviations (make playbook-truth)
 │   ├── playbook_dry_run_report.py # Summarises the fake-extractor dry run into docs/phase4-dry-run.md
 │   ├── parse_quality.py          # Evidence hit rates on the synthetic set + deskew experiment
@@ -177,7 +178,8 @@ lexintake/
 │   │   ├── script.py.mako        # Template for new migration files
 │   │   ├── versions/0001_ingestion_tables.py # documents, text_blocks, audit_log
 │   │   ├── versions/0002_extraction.py # new statuses, doc_type columns, extractions, llm_calls
-│   │   └── versions/0003_playbook.py # auto_approved status, extractions.playbook_results
+│   │   ├── versions/0003_playbook.py # auto_approved status, extractions.playbook_results
+│   │   └── versions/0004_approved.py # approved status (a person approved it)
 │   ├── app/
 │   │   ├── __init__.py           # Marks app/ as a package
 │   │   ├── config.py             # Settings read from env vars (DB, Redis, blobs, inbox, limits, ...)
@@ -716,6 +718,47 @@ containers.
 gives exactly the manifest's deviations (n=40 in CI; `make playbook-truth` runs the full 500: 201
 NDAs, 0 mismatches). The fake-extractor dry run is in
 [`docs/phase4-dry-run.md`](docs/phase4-dry-run.md): plumbing only, not model accuracy.
+
+## Review page (Phase 6, minimal)
+
+Two screens at <http://localhost:3000> (see `.env` for your port):
+
+![The review queue](docs/screenshots/review-queue.png)
+
+**Queue.** Every document with its type, status and flags (deviation / unknown counts and review
+reasons), filtered by status. It opens on *Needs review*.
+
+![A document with its cited quote highlighted](docs/screenshots/review-document.png)
+
+**Document.** The PDF on the left, with the quote behind the selected field highlighted. On the
+right: the playbook results (pass / deviation / unknown, each with its reason), the extracted
+fields with their quotes, why the document is in the queue, and the audit trail. Click a rule or a
+field to see its evidence on the PDF.
+
+- **Approve** moves a `needs_review` (or `extracted`) document to `approved`, a separate status
+  from `auto_approved`, so a person's decision is always visible. The audit row says who.
+- **Override** replaces one field's value. The old value stays on the field and in the audit
+  log (with an optional reason), and the playbook is checked again with the new value, which now
+  counts as verified by a person. An override does not approve the document.
+- **How highlights work.** Digital pages: pdf.js searches the page's own text for the quote and
+  boxes the text it finds. Scanned pages have no text layer, so the boxes come from the OCR text
+  blocks stored at parse time (`text_blocks` bounding boxes, in PDF points).
+- **Endpoints** (`backend/app/routes/review.py`): `GET /review/documents?status=`,
+  `GET /review/documents/{id}`, `GET /review/documents/{id}/file`, `POST .../approve`,
+  `POST .../fields/{name}/override`.
+- **Limits.** There is no login yet, so every action is recorded as the actor `reviewer`.
+  Approved documents are not filed anywhere (Phase 5, storage, is skipped for now).
+
+**Demo data.** `make seed-demo` uploads a few PDFs (the committed fixtures, plus some synthetic
+NDAs if `data/synthetic/` exists), lets the worker parse them, and "extracts" them with the **fake
+extractor**, which answers from the manifest. The screens show real parsing and real playbook
+checks, but the extraction is not a model's work, and no API is called. Running it again resets
+those documents.
+
+**Test.** `cd frontend && npm run e2e` runs the Playwright test against the seeded stack: open
+the queue, open a `needs_review` NDA, see the `no residuals` deviation, approve it. CI runs it in
+the Docker Compose job. (`E2E_CHROME=1 E2E_BASE_URL=http://localhost:3105` uses your installed
+Chrome and a different port.)
 
 ## Evaluation results
 

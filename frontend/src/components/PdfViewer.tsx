@@ -110,7 +110,12 @@ function PdfPage({
     : textRects;
 
   useEffect(() => {
-    first.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    // Scroll only the PDF pane (scrollIntoView would also move the window and the side panel).
+    const mark = first.current;
+    const pane = mark?.closest("section");
+    if (!mark || !pane) return;
+    const offset = mark.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+    pane.scrollTo({ top: pane.scrollTop + offset - pane.clientHeight / 3, behavior: "smooth" });
   }, [rects.length, quote]);
 
   return (

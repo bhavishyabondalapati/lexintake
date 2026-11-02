@@ -64,5 +64,7 @@ This is an independent portfolio project. It is NOT affiliated with any firm and
 * `make parse-quality` — parse the synthetic set; evidence hit rates + deskew experiment
 * `make ingest-smoke` — send 20 ContractNLI PDFs through the running stack, report crashes
 * `make requeue` — re-queue documents stuck in `received` (`STATUS=received,failed`)
+* `make seed-demo` — fill the running stack with demo documents (fake extractor, no API)
+* `cd frontend && npm run e2e` — Playwright test (needs the seeded stack)
 * `make playbook-truth` — playbook checker vs the full synthetic manifest (free)
 * `make eval` — run the evaluation harness
