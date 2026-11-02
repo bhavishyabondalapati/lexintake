@@ -1,166 +1,166 @@
 {
- "note": "One synthetic manifest entry per (doc_type, subtype), plus an NDA with every optional clause present. Copied from data/synthetic/manifest.json (seed 42).",
- "documents": [
-  {
-   "doc_id": "syn_00001",
-   "doc_type": "legal_notice",
-   "subtype": "notice_of_breach",
-   "fields": {
-    "claimant": "Dominguez Industrial Corp.",
-    "respondent": "Tamarind Harbor Partners Management, LLC",
-    "notice_date": "2024-02-06",
-    "agreement_date": "2022-10-04",
-    "cure_period_days": 15
-   }
-  },
-  {
-   "doc_id": "syn_00004",
-   "doc_type": "nda",
-   "subtype": null,
-   "fields": {
-    "counterparty": "Bishop Aerospace Holdings, Inc.",
-    "fund_party": "Larchmont Vale Partners Management, LLC",
-    "effective_date": "2025-12-11",
-    "mutual": false,
-    "term_months": 60,
-    "governing_law": "Delaware",
-    "non_solicit_months": 6,
-    "non_compete_months": null,
-    "residuals_clause": null,
-    "return_destroy_days": 10
-   }
-  },
-  {
-   "doc_id": "syn_00006",
-   "doc_type": "side_letter",
-   "subtype": null,
-   "fields": {
-    "investor": "Haynes Family Office LLC",
-    "fund": "Larchmont Vale Partners Fund V, L.P.",
-    "effective_date": "2024-04-29",
-    "commitment_usd": 55000000,
-    "management_fee_pct": 1.25,
-    "mfn": null,
-    "co_investment": true,
-    "advisory_committee_seat": true
-   }
-  },
-  {
-   "doc_id": "syn_00009",
-   "doc_type": "investor_notice",
-   "subtype": "distribution",
-   "fields": {
-    "fund": "Kestrel Ridge Capital Fund IV, L.P.",
-    "investor": "Osborn Insurance Company",
-    "notice_date": "2022-09-19",
-    "amount_usd": 6722000,
-    "payment_date": "2022-09-28"
-   }
-  },
-  {
-   "doc_id": "syn_00011",
-   "doc_type": "other",
-   "subtype": "board_minutes",
-   "fields": {
-    "company": "Brooks Logistics Holdings, Inc.",
-    "meeting_date": "2025-09-08"
-   }
-  },
-  {
-   "doc_id": "syn_00015",
-   "doc_type": "other",
-   "subtype": "marketing_flyer",
-   "fields": {
-    "vendor": "Castillo Packaging LLC",
-    "event_date": "2025-11-09"
-   }
-  },
-  {
-   "doc_id": "syn_00024",
-   "doc_type": "legal_notice",
-   "subtype": "demand_letter",
-   "fields": {
-    "claimant": "Thompson Foods Inc.",
-    "respondent": "Larchmont Vale Partners Management, LLC",
-    "notice_date": "2023-02-05",
-    "amount_claimed_usd": 766500,
-    "response_deadline": "2023-02-21"
-   }
-  },
-  {
-   "doc_id": "syn_00036",
-   "doc_type": "investor_notice",
-   "subtype": "capital_call",
-   "fields": {
-    "fund": "Bellhaven Equity Partners Fund VII, L.P.",
-    "investor": "Carter Family Office LLC",
-    "notice_date": "2023-04-26",
-    "amount_usd": 2467000,
-    "due_date": "2023-05-08"
-   }
-  },
-  {
-   "doc_id": "syn_00048",
-   "doc_type": "legal_notice",
-   "subtype": "subpoena",
-   "fields": {
-    "claimant": "Wiley Foods Inc.",
-    "respondent": "Kestrel Ridge Capital Management, LLC",
-    "notice_date": "2025-06-04",
-    "court": "United States District Court for the District of Delaware",
-    "case_number": "1:25-cv-08025",
-    "response_deadline": "2025-07-03"
-   }
-  },
-  {
-   "doc_id": "syn_00052",
-   "doc_type": "other",
-   "subtype": "invoice",
-   "fields": {
-    "vendor": "Hunter Industrial LLC",
-    "invoice_number": "INV-084086",
-    "invoice_date": "2024-11-09",
-    "amount_usd": 49875,
-    "due_date": "2024-11-24"
-   }
-  },
-  {
-   "doc_id": "syn_00129",
-   "doc_type": "investor_notice",
-   "subtype": "annual_meeting",
-   "fields": {
-    "fund": "Larchmont Vale Partners Fund III, L.P.",
-    "investor": "Wolfeborough Municipal Employees' Pension Fund",
-    "notice_date": "2024-06-03",
-    "meeting_date": "2024-07-07",
-    "meeting_location": "Hughesland, Tennessee"
-   }
-  },
-  {
-   "doc_id": "syn_00169",
-   "doc_type": "other",
-   "subtype": "newsletter",
-   "fields": {
-    "publisher": "Jackson Materials Inc.",
-    "issue_date": "2023-01-27"
-   }
-  },
-  {
-   "doc_id": "syn_00102",
-   "doc_type": "nda",
-   "subtype": null,
-   "fields": {
-    "counterparty": "Brown Health Inc.",
-    "fund_party": "Tamarind Harbor Partners Fund III, L.P.",
-    "effective_date": "2024-06-20",
-    "mutual": true,
-    "term_months": 6,
-    "governing_law": "New York",
-    "non_solicit_months": 6,
-    "non_compete_months": 18,
-    "residuals_clause": true,
-    "return_destroy_days": 45
-   }
-  }
- ]
+  "note": "One synthetic manifest entry per (doc_type, subtype), plus an NDA with every optional clause present. Copied from data/synthetic/manifest.json (seed 42).",
+  "documents": [
+    {
+      "doc_id": "syn_00001",
+      "doc_type": "legal_notice",
+      "subtype": "notice_of_breach",
+      "fields": {
+        "claimant": "Dominguez Industrial Corp.",
+        "respondent": "Tamarind Harbor Partners Management, LLC",
+        "notice_date": "2024-02-06",
+        "agreement_date": "2022-10-04",
+        "cure_period_days": 15
+      }
+    },
+    {
+      "doc_id": "syn_00004",
+      "doc_type": "nda",
+      "subtype": null,
+      "fields": {
+        "counterparty": "Bishop Aerospace Holdings, Inc.",
+        "fund_party": "Larchmont Vale Partners Management, LLC",
+        "effective_date": "2025-12-11",
+        "mutual": false,
+        "term_months": 60,
+        "governing_law": "Delaware",
+        "non_solicit_months": 6,
+        "non_compete_months": null,
+        "residuals_clause": null,
+        "return_destroy_days": 10
+      }
+    },
+    {
+      "doc_id": "syn_00006",
+      "doc_type": "side_letter",
+      "subtype": null,
+      "fields": {
+        "investor": "Haynes Family Office LLC",
+        "fund": "Larchmont Vale Partners Fund V, L.P.",
+        "effective_date": "2024-04-29",
+        "commitment_usd": 55000000,
+        "management_fee_pct": 1.25,
+        "mfn": null,
+        "co_investment": true,
+        "advisory_committee_seat": true
+      }
+    },
+    {
+      "doc_id": "syn_00009",
+      "doc_type": "investor_notice",
+      "subtype": "distribution",
+      "fields": {
+        "fund": "Kestrel Ridge Capital Fund IV, L.P.",
+        "investor": "Osborn Insurance Company",
+        "notice_date": "2022-09-19",
+        "amount_usd": 6722000,
+        "payment_date": "2022-09-28"
+      }
+    },
+    {
+      "doc_id": "syn_00011",
+      "doc_type": "other",
+      "subtype": "board_minutes",
+      "fields": {
+        "company": "Brooks Logistics Holdings, Inc.",
+        "meeting_date": "2025-09-08"
+      }
+    },
+    {
+      "doc_id": "syn_00015",
+      "doc_type": "other",
+      "subtype": "marketing_flyer",
+      "fields": {
+        "vendor": "Castillo Packaging LLC",
+        "event_date": "2025-11-09"
+      }
+    },
+    {
+      "doc_id": "syn_00024",
+      "doc_type": "legal_notice",
+      "subtype": "demand_letter",
+      "fields": {
+        "claimant": "Thompson Foods Inc.",
+        "respondent": "Larchmont Vale Partners Management, LLC",
+        "notice_date": "2023-02-05",
+        "amount_claimed_usd": 766500,
+        "response_deadline": "2023-02-21"
+      }
+    },
+    {
+      "doc_id": "syn_00036",
+      "doc_type": "investor_notice",
+      "subtype": "capital_call",
+      "fields": {
+        "fund": "Bellhaven Equity Partners Fund VII, L.P.",
+        "investor": "Carter Family Office LLC",
+        "notice_date": "2023-04-26",
+        "amount_usd": 2467000,
+        "due_date": "2023-05-08"
+      }
+    },
+    {
+      "doc_id": "syn_00048",
+      "doc_type": "legal_notice",
+      "subtype": "subpoena",
+      "fields": {
+        "claimant": "Wiley Foods Inc.",
+        "respondent": "Kestrel Ridge Capital Management, LLC",
+        "notice_date": "2025-06-04",
+        "court": "United States District Court for the District of Delaware",
+        "case_number": "1:25-cv-08025",
+        "response_deadline": "2025-07-03"
+      }
+    },
+    {
+      "doc_id": "syn_00052",
+      "doc_type": "other",
+      "subtype": "invoice",
+      "fields": {
+        "vendor": "Hunter Industrial LLC",
+        "invoice_number": "INV-084086",
+        "invoice_date": "2024-11-09",
+        "amount_usd": 49875,
+        "due_date": "2024-11-24"
+      }
+    },
+    {
+      "doc_id": "syn_00129",
+      "doc_type": "investor_notice",
+      "subtype": "annual_meeting",
+      "fields": {
+        "fund": "Larchmont Vale Partners Fund III, L.P.",
+        "investor": "Wolfeborough Municipal Employees' Pension Fund",
+        "notice_date": "2024-06-03",
+        "meeting_date": "2024-07-07",
+        "meeting_location": "Hughesland, Tennessee"
+      }
+    },
+    {
+      "doc_id": "syn_00169",
+      "doc_type": "other",
+      "subtype": "newsletter",
+      "fields": {
+        "publisher": "Jackson Materials Inc.",
+        "issue_date": "2023-01-27"
+      }
+    },
+    {
+      "doc_id": "syn_00102",
+      "doc_type": "nda",
+      "subtype": null,
+      "fields": {
+        "counterparty": "Brown Health Inc.",
+        "fund_party": "Tamarind Harbor Partners Fund III, L.P.",
+        "effective_date": "2024-06-20",
+        "mutual": true,
+        "term_months": 6,
+        "governing_law": "New York",
+        "non_solicit_months": 6,
+        "non_compete_months": 18,
+        "residuals_clause": true,
+        "return_destroy_days": 45
+      }
+    }
+  ]
 }

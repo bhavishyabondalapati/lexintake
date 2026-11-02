@@ -16,7 +16,16 @@
         "cure_period_days": "If the breach is not cured within fifteen (15) days after the date of this notice, Dominguez Industrial Corp. may terminate the Agreement and seek damages."
       },
       "tricky": null,
-      "duplicate_of": null
+      "duplicate_of": null,
+      "subtype": "notice_of_breach",
+      "fields": {
+        "claimant": "Dominguez Industrial Corp.",
+        "respondent": "Tamarind Harbor Partners Management, LLC",
+        "notice_date": "2024-02-06",
+        "agreement_date": "2022-10-04",
+        "cure_period_days": 15
+      },
+      "deviations": null
     },
     {
       "doc_id": "syn_00002",
@@ -34,7 +43,19 @@
         "co_investment": "The General Partner shall offer the Investor the opportunity to participate in co-investment opportunities alongside the Partnership on a no-fee, no-carry basis."
       },
       "tricky": null,
-      "duplicate_of": null
+      "duplicate_of": null,
+      "subtype": null,
+      "fields": {
+        "investor": "The Martinez Foundation",
+        "fund": "Larchmont Vale Partners Fund II, L.P.",
+        "effective_date": "2024-01-10",
+        "commitment_usd": 33500000,
+        "management_fee_pct": null,
+        "mfn": true,
+        "co_investment": true,
+        "advisory_committee_seat": null
+      },
+      "deviations": null
     },
     {
       "doc_id": "syn_00010",
@@ -53,7 +74,21 @@
         "governing_law": "This Agreement shall be governed by and construed in accordance with the laws of the State of New York, without regard to its conflict of laws principles."
       },
       "tricky": null,
-      "duplicate_of": null
+      "duplicate_of": null,
+      "subtype": null,
+      "fields": {
+        "counterparty": "Dalton Foods LLC",
+        "fund_party": "Kestrel Ridge Capital Management, LLC",
+        "effective_date": "2022-04-14",
+        "mutual": true,
+        "term_months": 6,
+        "governing_law": "New York",
+        "non_solicit_months": null,
+        "non_compete_months": null,
+        "residuals_clause": null,
+        "return_destroy_days": 45
+      },
+      "deviations": []
     },
     {
       "doc_id": "syn_00246",
@@ -70,7 +105,16 @@
         "cure_period_days": "If the breach is not cured within ten (10) days after the date of this notice, Oliver Software LLC may terminate the Agreement and seek damages."
       },
       "tricky": "duplicate",
-      "duplicate_of": "syn_00251"
+      "duplicate_of": "syn_00251",
+      "subtype": "notice_of_breach",
+      "fields": {
+        "claimant": "Oliver Software LLC",
+        "respondent": "Larchmont Vale Partners Management, LLC",
+        "notice_date": "2022-01-07",
+        "agreement_date": "2022-01-03",
+        "cure_period_days": 10
+      },
+      "deviations": null
     },
     {
       "doc_id": "syn_00251",
@@ -87,7 +131,16 @@
         "cure_period_days": "If the breach is not cured within ten (10) days after the date of this notice, Oliver Software LLC may terminate the Agreement and seek damages."
       },
       "tricky": null,
-      "duplicate_of": null
+      "duplicate_of": null,
+      "subtype": "notice_of_breach",
+      "fields": {
+        "claimant": "Oliver Software LLC",
+        "respondent": "Larchmont Vale Partners Management, LLC",
+        "notice_date": "2022-01-07",
+        "agreement_date": "2022-01-03",
+        "cure_period_days": 10
+      },
+      "deviations": null
     }
   ]
 }
