@@ -785,7 +785,65 @@ document on average ($0.019 per NDA with Sonnet, $0.0003 for the others with Hai
 extra value-not-in-quote review, an OCR spacing slip in a name, and two low-confidence flags. So the
 evaluation below is a **single run**, and small differences between percentages are noise.
 
-Full evaluation (ContractNLI, the 500-document manifest) comes in Phase 7.
+### Phase 7: full evaluation (details in [`docs/eval-results.md`](docs/eval-results.md))
+
+Single runs through the Anthropic Batch API (half price): `python -m app.cli extract --batch DIR`.
+Real models (Haiku for classification and small field sets, Sonnet for NDA fields). The models
+take no `temperature`, so a rerun varies a little. **Two different datasets, not comparable:**
+
+**A. Synthetic (500 generated documents, 495 unique; ground truth is the manifest).** Numbers are
+from the **test half** (248 documents). The confidence thresholds were chosen on a separate
+calibration half, by fixed seed.
+
+| | Digital | Scanned | All |
+|---|---|---|---|
+| Document type correct | 207/207 | 41/41 | 248/248 |
+| NDA recall | 89/89 | 16/16 | 105/105 |
+| Field exact match | 1489/1490 (100%) | 279/292 (96%) | 1768/1782 (99%) |
+| Quote found in the text (non-null fields) | 1253/1253 | 242/242 | 1495/1495 |
+| NDA playbook result equals the manifest | 89/89 | 11/16 (69%) | 100/105 (95%) |
+| Sent to review | 77/207 (37%) | 34/41 (83%) | 111/248 (45%) |
+
+Review queue quality (test half, calibrated thresholds): of 111 documents sent to review, 94 had a
+real problem (an error, a true playbook deviation, or an out-of-scope type); of the 96 documents
+that need a human, 94 were caught. Counting only extraction errors, 11 of 13 were caught: too few
+errors to be conclusive. Cost: **$0.0043 per document on average** (NDA $0.0097, others $0.0003 to
+$0.0005), $2.04 for all 495.
+
+The 13 wrong scanned fields in the test half: 6 are the model copying damaged OCR text faithfully
+(e.g. "Fund VIl"), 7 are the model returning nothing. Digital pages: 1 wrong field in 1,490.
+
+**B. ContractNLI (real NDAs, test split, CC BY 4.0).** Only two of our fields correspond to a
+ContractNLI hypothesis, and only as clause present vs absent: `return_destroy_days` ~ nda-16 and
+`non_solicit_months` ~ nda-18. The 66-document sample is **label-stratified** (all Entailment
+documents that fit, then NotMentioned), so **overall accuracy is not reported**. "Original" =
+the dataset's own PDF; "rendered" = the original was .txt/.htm, so the JSON text was rendered to a
+clean PDF (easier than real files).
+
+| Hypothesis, class | Measure | Original PDF | Rendered |
+|---|---|---|---|
+| nda-16 return/destroy, Entailment | field filled in | 4/24 | 1/13 |
+| nda-16, NotMentioned | field filled in (false alarm) | 1/8 | 2/20 |
+| nda-18 non-solicit, Entailment | field filled in | 4/5 | 16/23 |
+| nda-18, NotMentioned | field filled in (false alarm) | 0/27 | 0/11 |
+
+Read this carefully:
+- **A third of the sample got no field answer at all** (22 of 66): 9 classification answers were cut
+  off at the 400-token bound I set, and 13 documents were sent to review before extraction because
+  the model was not confident enough that they were NDAs. They count as misses for Entailment.
+- **nda-16 recall is low largely because the field is a number of days.** Many real NDAs require
+  return or destruction without any deadline, so the field comes back empty. Counting "flagged as
+  mentioned" too lifts recall to 9/24 (original) and 6/13 (rendered), but that keyword scan also
+  flags 11/20 rendered NotMentioned documents, so it is not a fair detector.
+- **Small cells.** The 5 original-PDF non-solicit Entailment documents are all such documents in
+  the test split (the dataset's limit). The 8 original-PDF nda-16 NotMentioned documents are a
+  sample of 52 (our budget). Conclusions from cells this small are not safe.
+- Not one of the 66 real NDAs was auto-approved (all went to review): real NDAs trip at least one
+  check (a deviation, an unknown, or a low-confidence field).
+- ContractNLI cannot score the other eight NDA fields (counterparty, dates, term, governing law,
+  mutual, non-compete, residuals); the synthetic evaluation covers those. Cost: $0.0068 (original)
+  and $0.0093 (rendered) per document.
+
 
 ## How it was built
 
@@ -938,6 +996,20 @@ Full evaluation (ContractNLI, the 500-document manifest) comes in Phase 7.
 
 ## Known issues
 
+- **Confident OCR errors get through (syn_00264, syn_00271).** Two scanned test-set documents had a
+  fund name read wrongly by OCR ("Capital Fund III,L.P." with a space lost; "Bellhaven
+  EquityPartners Fund II" where the document says Fund III). The model copied the damaged text
+  faithfully, the quote verified against that same text, and its confidence was 0.9 and 0.95, so no
+  confidence threshold can catch them without reviewing almost every scanned document. Future work:
+  flag damaged-looking OCR text (missing spaces, "I" for "l", dropped punctuation in names) and
+  send those documents to review.
+- **Prompt caching barely helps on Sonnet.** In the 500-document run Sonnet wrote only 1.2k
+  tokens to the cache and read 238k of its 1.0M input tokens from it, so most of the input was
+  paid at the full price. The system prompt is probably below the minimum cacheable length for
+  that model. The saving would be small (a few percent of the cost).
+- **Classification answers can be cut off on real documents.** In the ContractNLI batch 9 of 66
+  hit the 400-token bound I set for batch classification. A higher bound for that step is a
+  one-line change; it was not re-run for lack of budget.
 - **httpx deprecation warning in tests.** `pytest` prints a `StarletteDeprecationWarning` from
   FastAPI's `TestClient` saying `httpx` is deprecated there. It's harmless and all tests pass.
   The fix is left for later, until the suggested replacement package has been checked.

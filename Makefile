@@ -1,4 +1,4 @@
-.PHONY: dev down install test test-slow smoke requeue lint format requirements data data-cuad synthetic playbook-truth seed-demo \
+.PHONY: dev down install test test-slow smoke requeue lint format requirements data data-cuad synthetic playbook-truth seed-demo eval-synthetic eval-contractnli \
 	parse-quality ingest-smoke extract extract-preview eval
 
 dev: ## Start the whole stack (db, redis, migrate, api, watcher, worker, extractor, frontend)
@@ -46,6 +46,12 @@ synthetic: ## Generate 500 synthetic documents + manifest into data/synthetic/ (
 
 seed-demo: ## Fill the running stack with demo documents for the review screens (fake extractor, no API)
 	PYTHONPATH=backend:. uv run --project backend python -m scripts.seed_demo
+
+eval-synthetic: ## Report on a finished batch run (free): make eval-synthetic RUN=<run id>
+	PYTHONPATH=backend:. uv run --project backend python -m scripts.eval_synthetic --run $${RUN:?set RUN}
+
+eval-contractnli: ## Score the ContractNLI sample from the database (free)
+	PYTHONPATH=backend:. uv run --project backend python -m scripts.eval_contractnli score
 
 playbook-truth: ## Check the playbook checker against the full synthetic manifest (free)
 	PYTHONPATH=backend:. uv run --project backend python -m scripts.playbook_ground_truth
