@@ -116,6 +116,24 @@ def _describe(rule: Rule, value: Any) -> str:
             return "clause must be present"
 
 
+def _check_rule(rule: Rule, entry: dict[str, Any] | None) -> RuleResult:
+    value = entry.get("value") if entry else None
+    page = entry.get("page") if entry else None
+    quote = entry.get("quote") if entry else None
+
+    def result(outcome: str, reason: str) -> RuleResult:
+        return RuleResult(rule.id, rule.field, outcome, value, page, quote, reason)
+
+    doubt = _untrusted_reason(entry)
+    if doubt:
+        return result(UNKNOWN, doubt)
+    if value is None and rule.check == "one_of":
+        return result(UNKNOWN, "no value to compare with the allowed list")
+    if rule.passes(value):
+        return result(PASS, _describe(rule, value))
+    return result(DEVIATION, _describe(rule, value))
+
+
 def check_playbook(playbook: Playbook, extracted: dict[str, dict[str, Any]]) -> list[RuleResult]:
     """One result per rule, in playbook order.
 
@@ -123,23 +141,4 @@ def check_playbook(playbook: Playbook, extracted: dict[str, dict[str, Any]]) -> 
     stored in extractions.fields. Only a verified value (or a verified absence) is judged. Anything
     else, including a field that is missing from the dict, is `unknown`: never a pass.
     """
-    results = []
-    for rule in playbook.rules:
-        entry = extracted.get(rule.field)
-        value = entry.get("value") if entry else None
-        page = entry.get("page") if entry else None
-        quote = entry.get("quote") if entry else None
-
-        def result(outcome: str, reason: str) -> RuleResult:
-            return RuleResult(rule.id, rule.field, outcome, value, page, quote, reason)
-
-        doubt = _untrusted_reason(entry)
-        if doubt:
-            results.append(result(UNKNOWN, doubt))
-        elif value is None and rule.check == "one_of":
-            results.append(result(UNKNOWN, "no value to compare with the allowed list"))
-        elif rule.passes(value):
-            results.append(result(PASS, _describe(rule, value)))
-        else:
-            results.append(result(DEVIATION, _describe(rule, value)))
-    return results
+    return [_check_rule(rule, extracted.get(rule.field)) for rule in playbook.rules]

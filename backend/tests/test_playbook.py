@@ -77,7 +77,6 @@ def test_duplicate_rule_ids_are_rejected():
 # --- check_playbook: pass / deviation / unknown with evidence -----------------------------------
 
 
-
 def _entries(values: dict) -> dict:
     return {
         k: {
