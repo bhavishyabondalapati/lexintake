@@ -122,6 +122,12 @@ def test_quotes_are_unescaped_before_matching():
     assert span.found and span.score == 100
 
 
+def test_spacing_inside_angle_brackets_does_not_matter():
+    # Docling extracted "<notices@x>" as "< notices@x>" from a real PDF.
+    doc = _doc([["a written request (sent to < notices@okafor.example>) by the Party"]])
+    assert find_span(doc, "(sent to ‹notices@okafor.example›) by", 1).score == 100
+
+
 def test_whitespace_and_curly_quotes_do_not_matter():
     doc = _doc([['the "Agreement"   is  entered into']])
     assert find_span(doc, "the “Agreement” is entered\ninto", 1).found

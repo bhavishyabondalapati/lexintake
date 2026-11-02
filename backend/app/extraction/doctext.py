@@ -37,12 +37,16 @@ _TRANSLATE = str.maketrans(
     }
 )
 _SPACE = re.compile(r"\s+")
+# Docling sometimes extracts "<notices@x>" as "< notices@x>"; spacing just inside angle brackets
+# doesn't matter for matching.
+_INSIDE_BRACKETS = re.compile(r"(?<=<)\s+|\s+(?=>)")
 
 
 def normalize(text: str) -> str:
-    """Unescape ‹ ›, NFKC (ligatures, full-width), straight quotes and dashes, one space."""
+    """Unescape ‹ ›, NFKC (ligatures, full-width), straight quotes and dashes, one space, no space
+    just inside < >."""
     text = unicodedata.normalize("NFKC", text).translate(_TRANSLATE)
-    return _SPACE.sub(" ", text).strip()
+    return _INSIDE_BRACKETS.sub("", _SPACE.sub(" ", text)).strip()
 
 
 def escape(text: str) -> str:
