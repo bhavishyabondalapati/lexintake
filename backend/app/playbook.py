@@ -142,3 +142,33 @@ def check_playbook(playbook: Playbook, extracted: dict[str, dict[str, Any]]) -> 
     else, including a field that is missing from the dict, is `unknown`: never a pass.
     """
     return [_check_rule(rule, extracted.get(rule.field)) for rule in playbook.rules]
+
+
+def self_check() -> int:
+    """Load the playbook and run the checker on a standard NDA. Used by the compose smoke test to
+    prove the playbook file is inside the container and the checker works there."""
+    playbook = load_playbook()
+    standard = {
+        "term_months": 24,
+        "governing_law": "Delaware",
+        "non_solicit_months": 12,
+        "non_compete_months": None,
+        "residuals_clause": None,
+        "return_destroy_days": 30,
+    }
+    extracted = {
+        k: {
+            "value": v,
+            "status": "verified" if v is not None else "absent",
+            "page": 1,
+            "quote": "x",
+        }
+        for k, v in standard.items()
+    }
+    outcomes = {r.outcome for r in check_playbook(playbook, extracted)}
+    print(f"playbook v{playbook.version}: {len(playbook.rules)} rules, standard NDA -> {outcomes}")
+    return 0 if outcomes == {PASS} else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(self_check())

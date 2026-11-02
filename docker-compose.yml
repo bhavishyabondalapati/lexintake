@@ -72,6 +72,7 @@ services:
       - "${API_PORT:-8000}:8000"
     volumes:
       - blobs:/data/blobs
+      - ./playbook:/playbook:ro # the NDA playbook; app.playbook finds it at /playbook
     depends_on: *after-migrate
     healthcheck:
       test:
@@ -117,6 +118,7 @@ services:
     environment: *backend-env
     volumes:
       - blobs:/data/blobs
+      - ./playbook:/playbook:ro # the NDA playbook; app.playbook finds it at /playbook
     depends_on: *after-migrate
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.worker inspect ping -d celery@$$HOSTNAME --timeout 5"]
@@ -140,6 +142,8 @@ services:
       - --loglevel=info
       - --concurrency=${EXTRACTOR_CONCURRENCY:-4}
     environment: *backend-env
+    volumes:
+      - ./playbook:/playbook:ro # the NDA playbook; app.playbook finds it at /playbook
     depends_on: *after-migrate
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.worker inspect ping -d celery@$$HOSTNAME --timeout 5"]

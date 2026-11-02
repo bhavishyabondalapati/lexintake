@@ -10,6 +10,7 @@ checks it comes back as a duplicate of the same document.
 
 import argparse
 import json
+import subprocess
 import sys
 import time
 import urllib.request
@@ -81,6 +82,18 @@ def main() -> int:
     print(f"re-upload -> {status}, duplicate={again['duplicate']}")
     if status != 200 or not again["duplicate"] or again["id"] != doc["id"]:
         return 1
+    # The playbook must be inside the images, not just on the host (the Phase 1 note).
+    for service in ("worker", "api"):
+        check = subprocess.run(
+            ["docker", "compose", "exec", "-T", service, "python", "-m", "app.playbook"],
+            capture_output=True,
+            text=True,
+        )
+        print(
+            f"playbook checker in {service}: {check.stdout.strip() or check.stderr.strip()[-300:]}"
+        )
+        if check.returncode != 0:
+            return 1
     print("smoke test passed")
     return 0
 
