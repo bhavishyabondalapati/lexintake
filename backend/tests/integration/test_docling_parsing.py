@@ -89,3 +89,27 @@ def test_corrupt_pdf_raises_parse_error(parser, tmp_path):
 
     with pytest.raises(ParseError):
         parser.parse(broken)
+
+
+SPECIAL = {
+    d["doc_id"]: d
+    for d in json.loads((FIXTURES / "special_fixtures.json").read_text())["documents"]
+}
+
+
+@pytest.mark.parametrize("doc_id", ["injection_nda", "angle_brackets_nda"])
+def test_special_fixtures_keep_angle_brackets_and_attack_text_through_parsing(parser, doc_id):
+    from app.extraction.doctext import BlockText, doc_text_from_blocks
+    from app.extraction.verify import find_span
+
+    entry = SPECIAL[doc_id]
+    result = parser.parse(FIXTURES / entry["file"])
+    doc = doc_text_from_blocks(
+        result.page_count,
+        [(b.page, BlockText(i, b.text, b.source.value)) for i, b in enumerate(result.blocks)],
+    )
+
+    for field, evidence in entry["evidence"].items():
+        assert find_span(doc, evidence, None).score == 100, f"{field}: {evidence!r}"
+    for attack in entry.get("attacks", []):
+        assert find_span(doc, attack, None).found, attack

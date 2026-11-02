@@ -38,7 +38,12 @@ from app.extraction.route import (
     scope_reasons,
 )
 from app.extraction.schemas import SCHEMA_VERSION, CitedFields, Classification
-from app.extraction.verify import check_classification, check_fields, nda_signals
+from app.extraction.verify import (
+    check_classification,
+    check_fields,
+    injection_signals,
+    nda_signals,
+)
 from app.models import AuditLog, Document, Extraction, LlmCall, LlmOutcome, Status
 from app.status import transition
 
@@ -150,7 +155,8 @@ class _Step:
 
     def run(self) -> tuple[list[Reason], Extraction]:
         settings, doc = self.ctx.settings, self.doc
-        reasons = document_reasons(doc)
+        injection = injection_signals(doc)
+        reasons = document_reasons(doc, injection)
         extraction = Extraction(
             document_id=self.document_id,
             classification={},
@@ -176,6 +182,7 @@ class _Step:
             "subtype": extraction.doc_subtype,
             **check.to_json(),
             "nda_signals": signals,
+            "injection_signals": injection,
         }
         doubts = classification_reasons(settings, c, check, signals)
         if doubts:

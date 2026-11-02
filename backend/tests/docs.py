@@ -10,6 +10,12 @@ from tests.conftest import FIXTURES
 MANIFEST = {
     d["doc_id"]: d for d in json.loads((FIXTURES / "manifest.json").read_text())["documents"]
 }
+SPECIAL = {
+    d["doc_id"]: d
+    for d in json.loads((FIXTURES / "special_fixtures.json").read_text())["documents"]
+}
+INJECTION_NDA = SPECIAL["injection_nda"]  # an NDA with planted prompt-injection attacks
+ANGLE_NDA = SPECIAL["angle_brackets_nda"]  # an NDA with a literal <...> in a clause
 NDA = MANIFEST["syn_00010"]  # digital, 2 pages
 LEGAL_NOTICE = MANIFEST["syn_00001"]  # digital notice of breach
 SIDE_LETTER = MANIFEST["syn_00002"]  # scanned
@@ -35,12 +41,18 @@ def add_parsed_doc(
     partial: bool = False,
     status: Status = Status.PARSED,
 ) -> uuid.UUID:
-    """A parsed document whose text is the entry's title + evidence sentences over two pages."""
-    sentences = list(dict.fromkeys(entry["evidence"].values()))
-    if entry["doc_type"] == "nda":
-        sentences.insert(0, NDA_DEFINITION)
+    """A parsed document over two pages. Its text is the entry's paragraphs when it has them (the
+    special fixtures), else a title + the evidence sentences."""
+    if "paragraphs" in entry:
+        sentences = list(entry["paragraphs"])
+        title = []
+    else:
+        sentences = list(dict.fromkeys(entry["evidence"].values()))
+        if entry["doc_type"] == "nda":
+            sentences.insert(0, NDA_DEFINITION)
+        title = [TITLES[entry["doc_type"]]]
     half = (len(sentences) + 1) // 2
-    pages = [[TITLES[entry["doc_type"]], *sentences[:half]], [*sentences[half:], *extra]]
+    pages = [[*title, *sentences[:half]], [*sentences[half:], *extra]]
     with session_scope() as session:
         doc = Document(
             sha256=uuid.uuid4().hex + uuid.uuid4().hex,

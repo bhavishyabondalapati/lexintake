@@ -24,12 +24,16 @@ class Reason:
         return asdict(self)
 
 
-def document_reasons(doc: DocText) -> list[Reason]:
+def document_reasons(doc: DocText, injection: list[str]) -> list[Reason]:
+    reasons = []
     if doc.partial:
-        return [Reason("partial_parse", detail="some pages could not be parsed")]
+        reasons.append(Reason("partial_parse", detail="some pages could not be parsed"))
     if not doc.norm_text:
-        return [Reason("no_text", detail="the parser found no text")]
-    return []
+        reasons.append(Reason("no_text", detail="the parser found no text"))
+    if injection:
+        # The text talks to an AI system. Whatever the model answered, a person should look.
+        reasons.append(Reason("suspected_prompt_injection", detail=", ".join(injection)))
+    return reasons
 
 
 def classification_reasons(

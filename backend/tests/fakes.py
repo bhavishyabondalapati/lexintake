@@ -5,7 +5,7 @@ from pathlib import Path
 
 from app.extraction.anthropic_extractor import validate
 from app.extraction.base import CallPlan, LlmResult, Usage
-from app.extraction.doctext import DocText, normalize
+from app.extraction.doctext import DocText, escape, normalize
 from app.models import BlockSource, LlmOutcome, LlmStep
 from app.parsing.base import Block, ParseResult
 
@@ -65,6 +65,7 @@ NOT_IN_DOC = "This sentence does not appear anywhere in the document."
 
 class FakeExtractor:
     """Answers like a careful model would, from a manifest entry (the truth) and the parsed text.
+    Quotes come back escaped (‹ › for < >), exactly as the model sees the document.
 
     Knobs for the unhappy paths:
     - invalid_times: return broken JSON this many times first
@@ -121,7 +122,7 @@ class FakeExtractor:
             "subtype": self.entry.get("subtype"),
             "confidence": 0.95,
             "page": 1,
-            "quote": NOT_IN_DOC if self.invent_quotes else first,
+            "quote": NOT_IN_DOC if self.invent_quotes else escape(first),
         }
         return answer | self.classification
 
@@ -136,7 +137,8 @@ class FakeExtractor:
             if value is None:
                 answer[name] = {"value": None, "page": None, "quote": None, "confidence": 0.9}
             else:
-                quote = NOT_IN_DOC if self.invent_quotes else quote
+                # The model sees < and > as ‹ and › (prompts.render_document) and quotes them so.
+                quote = NOT_IN_DOC if self.invent_quotes else escape(quote)
                 answer[name] = {"value": value, "page": page, "quote": quote, "confidence": 0.95}
             answer[name] |= self.fields.get(name, {})
         return answer

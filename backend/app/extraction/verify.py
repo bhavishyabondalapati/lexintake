@@ -54,6 +54,33 @@ NDA_SIGNALS: dict[str, re.Pattern[str]] = {
 }
 NDA_SIGNALS_MIN = 2
 
+# Text addressed to an AI system inside a document. The main defence against prompt injection is
+# structural (the model can't approve anything, and every value must be quoted from the document),
+# but an attack can plant a fake value *in* the document and get it quoted. So a document that
+# talks to "the AI" always goes to a person. A heuristic: it will miss some attacks.
+INJECTION_SIGNALS: dict[str, re.Pattern[str]] = {
+    "ignore_instructions": re.compile(
+        r"(?:ignore|disregard|forget)\s+(?:all\s+)?(?:the\s+|any\s+)?(?:previous|prior|above|"
+        r"earlier|preceding)\s+(?:instructions|prompts?|rules)",
+        re.I,
+    ),
+    "addressed_to_ai": re.compile(
+        r"\b(?:note|message|instructions?)\s+(?:to|for)\s+(?:the\s+|any\s+)?(?:ai|llm|model|"
+        r"assistant|language\s+model|automated\s+reviewer)s?\b|\bai\s+(?:reviewers?|systems?|"
+        r"assistants?|models?)\b",
+        re.I,
+    ),
+    "fake_system_message": re.compile(
+        r"\bsystem\s+(?:note|prompt|message)\b|<\s*/?\s*system\b", re.I
+    ),
+    "fake_prompt_tags": re.compile(r"<\s*/?\s*(?:document|page|instructions?)\b", re.I),
+    "asks_for_approval": re.compile(
+        r"\bmark\s+(?:it|this(?:\s+document|\s+agreement)?)\s+(?:as\s+)?approved\b|"
+        r"\bset\s+(?:every|all|each)\s+confidences?\b",
+        re.I,
+    ),
+}
+
 
 @dataclass
 class SpanMatch:
@@ -266,3 +293,8 @@ def check_classification(doc: DocText, c: Classification) -> FieldCheck:
 def nda_signals(doc: DocText) -> list[str]:
     """Which NDA signals the text contains."""
     return [name for name, pattern in NDA_SIGNALS.items() if pattern.search(doc.norm_text)]
+
+
+def injection_signals(doc: DocText) -> list[str]:
+    """Which kinds of AI-directed instructions the text contains (see INJECTION_SIGNALS)."""
+    return [name for name, pattern in INJECTION_SIGNALS.items() if pattern.search(doc.norm_text)]
