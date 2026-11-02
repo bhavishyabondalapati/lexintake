@@ -9,7 +9,7 @@ from app.extraction.run import RunContext, run_extraction
 from app.main import app
 from app.routes.documents import get_blob_store
 from app.storage.blobs import LocalBlobStore
-from tests.docs import ANGLE_NDA, NDA, add_parsed_doc
+from tests.docs import ANGLE_NDA, INJECTION_NDA, NDA, add_parsed_doc
 from tests.fakes import FakeExtractor
 
 pytestmark = pytest.mark.db
@@ -41,8 +41,11 @@ def test_queue_filters_by_status_and_shows_flags(client):
 
     assert set(everything) == {str(review), str(clean)}
     assert [d["id"] for d in only_review] == [str(review)]
-    assert only_review[0]["flags"] == ["playbook_deviation"]
-    assert only_review[0]["deviations"] == 1
+    assert [(f["kind"], f["label"]) for f in only_review[0]["flags"]] == [
+        ("deviation", "Residuals clause")
+    ]
+    assert everything[str(review)]["label"] == ANGLE_NDA["fields"]["counterparty"]
+    assert client.get("/review/counts").json() == {"needs_review": 1, "auto_approved": 1}
 
 
 def test_detail_has_fields_quotes_playbook_and_audit(client):
@@ -98,3 +101,15 @@ def test_override_unknown_field_is_404_and_missing_document_is_404(client):
         client.post(f"/review/documents/{doc_id}/fields/nope/override", json={}).status_code == 404
     )
     assert client.get(f"/review/documents/{uuid.uuid4()}").status_code == 404
+
+
+def test_needs_review_is_sorted_by_severity_then_date(client):
+    deviation = extract(ANGLE_NDA)
+    injection = extract(INJECTION_NDA)
+    clean_then_edited = extract(NDA)  # auto_approved: sorts after the review items
+
+    order = [d["id"] for d in client.get("/review/documents").json()]
+
+    assert order == [str(injection), str(deviation), str(clean_then_edited)]
+    flags = client.get("/review/documents", params={"status": "needs_review"}).json()[0]["flags"]
+    assert flags[0]["kind"] == "injection"

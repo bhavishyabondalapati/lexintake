@@ -22,6 +22,7 @@ class Rule(BaseModel):
     limit: int | None = None
     allowed: list[str] | None = None
     description: str = ""
+    label: str = ""  # short name of what a deviation looks like, e.g. "Term > 24 months"
 
     @model_validator(mode="after")
     def params_match_check(self) -> "Rule":
@@ -29,6 +30,11 @@ class Rule(BaseModel):
             raise ValueError(f"rule {self.id!r}: check 'max' needs a 'limit'")
         if self.check == "one_of" and not self.allowed:
             raise ValueError(f"rule {self.id!r}: check 'one_of' needs a non-empty 'allowed' list")
+        return self
+
+    @model_validator(mode="after")
+    def default_label(self) -> "Rule":
+        self.label = self.label or self.id.replace("_", " ")
         return self
 
     def passes(self, value: Any) -> bool:

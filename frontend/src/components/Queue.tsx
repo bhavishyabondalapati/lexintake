@@ -4,7 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { StatusBadge } from "@/components/StatusBadge";
-import { api, STATUS_LABEL, type QueueItem } from "@/lib/api";
+import { api, STATUS_LABEL, type Flag, type QueueItem } from "@/lib/api";
+
+const FLAG_STYLE: Record<Flag["kind"], string> = {
+  injection: "bg-red-600 text-white",
+  deviation: "bg-red-50 text-red-700",
+  unknown: "bg-amber-50 text-amber-800",
+  unverified: "bg-amber-50 text-amber-800",
+  other: "bg-zinc-100 text-zinc-600",
+};
 
 const FILTERS = ["", "needs_review", "approved", "auto_approved", "extracted"];
 const TYPE_LABEL: Record<string, string> = {
@@ -19,6 +27,12 @@ export function Queue() {
   const [status, setStatus] = useState("needs_review");
   const [items, setItems] = useState<QueueItem[] | null>(null);
   const [error, setError] = useState("");
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  // Counts for the tabs; they change when the filter is changed back and forth after an approval.
+  useEffect(() => {
+    api<Record<string, number>>("/review/counts").then(setCounts).catch(() => {});
+  }, [status]);
 
   useEffect(() => {
     let live = true;
@@ -50,7 +64,8 @@ export function Queue() {
                 status === f ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-600 hover:text-zinc-900"
               }`}
             >
-              {f ? STATUS_LABEL[f] : "All"}
+              {f ? STATUS_LABEL[f] : "All"} (
+              {f ? (counts[f] ?? 0) : Object.values(counts).reduce((a, b) => a + b, 0)})
             </button>
           ))}
         </div>
@@ -72,8 +87,9 @@ export function Queue() {
               <tr key={d.id} className="hover:bg-zinc-50">
                 <td className="px-4 py-2.5">
                   <Link href={`/documents/${d.id}`} className="font-medium text-zinc-900 hover:underline">
-                    {d.filename}
+                    {d.label}
                   </Link>
+                  <span className="block text-xs text-zinc-400">{d.filename}</span>
                 </td>
                 <td className="px-4 py-2.5 text-zinc-600">
                   {d.doc_type ? TYPE_LABEL[d.doc_type] : "—"}
@@ -83,23 +99,11 @@ export function Queue() {
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="flex flex-wrap gap-1.5">
-                    {d.deviations > 0 && (
-                      <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs text-red-700">
-                        {d.deviations} deviation{d.deviations > 1 ? "s" : ""}
+                    {d.flags.map((f) => (
+                      <span key={f.label} className={`rounded px-1.5 py-0.5 text-xs ${FLAG_STYLE[f.kind]}`}>
+                        {f.label}
                       </span>
-                    )}
-                    {d.unknowns > 0 && (
-                      <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-700">
-                        {d.unknowns} unknown
-                      </span>
-                    )}
-                    {d.flags
-                      .filter((f) => !f.startsWith("playbook_"))
-                      .map((f) => (
-                        <span key={f} className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600">
-                          {f.replaceAll("_", " ")}
-                        </span>
-                      ))}
+                    ))}
                   </div>
                 </td>
                 <td className="px-4 py-2.5 text-right text-zinc-500 tabular-nums">

@@ -11,40 +11,48 @@
 #   one_of   value is in "allowed"; null fails
 #   absent   passes only if null (the clause must not be there)
 #   present  passes only if not null (the clause must be there)
+#
+# `label` is the short name shown in the review queue when the rule is broken.
 
 version: 1
 document_type: nda
 
 rules:
   - id: max_term
+    label: Term > 24 months
     field: term_months
     check: max
     limit: 24
     description: The confidentiality term may not exceed 24 months.
 
   - id: governing_law_allowed
+    label: Governing law not Delaware / New York
     field: governing_law
     check: one_of
     allowed: [Delaware, New York]
     description: Governing law must be Delaware or New York.
 
   - id: non_solicit_max
+    label: Non-solicit > 12 months
     field: non_solicit_months
     check: max
     limit: 12
     description: A non-solicit is acceptable only if it lasts 12 months or less.
 
   - id: no_non_compete
+    label: Non-compete clause
     field: non_compete_months
     check: absent
     description: No non-compete. A fund cannot agree to stay out of a sector.
 
   - id: no_residuals
+    label: Residuals clause
     field: residuals_clause
     check: absent
     description: No residuals clause. It would let the counterparty use what it remembers.
 
   - id: return_destroy_required
+    label: No return / destroy obligation
     field: return_destroy_days
     check: present
     description: The NDA must require return or destruction of confidential information.

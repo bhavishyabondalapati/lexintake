@@ -7,17 +7,18 @@ export function browserApiUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
+export type Flag = { kind: "injection" | "deviation" | "unknown" | "unverified" | "other"; label: string };
+
 export type QueueItem = {
   id: string;
+  label: string;
   filename: string;
   status: string;
   doc_type: string | null;
   doc_subtype: string | null;
   page_count: number | null;
   created_at: string;
-  flags: string[];
-  deviations: number;
-  unknowns: number;
+  flags: Flag[];
 };
 
 export type Box = { page: number; x0: number; y0: number; x1: number; y1: number };

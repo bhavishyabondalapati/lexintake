@@ -9,7 +9,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_session
@@ -24,10 +24,14 @@ ACTOR = "reviewer"
 APPROVABLE = {Status.NEEDS_REVIEW, Status.EXTRACTED}
 
 
+class Flag(BaseModel):
+    kind: str  # injection | deviation | unknown | unverified | other
+    label: str
+
+
 class QueueItem(DocumentOut):
-    flags: list[str]  # review reason codes
-    deviations: int
-    unknowns: int
+    label: str  # the counterparty (or investor, claimant...) when known, else the filename
+    flags: list[Flag]
 
 
 class Box(BaseModel):
@@ -52,6 +56,7 @@ class FieldOut(BaseModel):
 
 
 class ReviewDetail(DocumentOut):
+    label: str
     fields: list[FieldOut]
     playbook_results: list[dict] | None
     review_reasons: list[dict]
@@ -61,6 +66,63 @@ class ReviewDetail(DocumentOut):
 class OverrideIn(BaseModel):
     value: Any = None
     note: str = ""
+
+
+# The first of these fields that has a value names the document.
+LABEL_FIELDS = ("counterparty", "investor", "claimant", "vendor", "publisher")
+# Worst first. Documents that are not waiting for review sort after all of them.
+SEVERITY = {"injection": 0, "deviation": 1, "unknown": 2, "unverified": 2, "other": 3}
+
+
+def display_label(fields: dict[str, Any], filename: str) -> str:
+    for name in LABEL_FIELDS:
+        value = (fields.get(name) or {}).get("value")
+        if value:
+            return str(value)
+    return filename
+
+
+def _words(code: str) -> str:
+    return code.replace("_", " ")
+
+
+def flags_for(extraction: Extraction | None) -> list[Flag]:
+    """What is wrong with a document, in words: the rule that failed, the field that could not be
+    verified, a suspected injection."""
+    if extraction is None:
+        return []
+    rules = {r.id: r.label for r in load_playbook().rules}
+    reasons = extraction.review_reasons or []
+    flagged_fields = {r["field"] for r in reasons if r["code"] != "playbook_unknown"}
+    flags = []
+    for r in reasons:
+        if r["code"] == "suspected_prompt_injection":
+            flags.append(Flag(kind="injection", label="Suspected prompt injection"))
+    for r in extraction.playbook_results or []:
+        if r["outcome"] == "deviation":
+            flags.append(Flag(kind="deviation", label=rules.get(r["rule_id"], r["rule_id"])))
+        elif r["outcome"] == "unknown" and r["field"] not in flagged_fields:
+            flags.append(
+                Flag(kind="unknown", label=f"Unknown: {rules.get(r['rule_id'], r['rule_id'])}")
+            )
+    for r in reasons:
+        code, field = r["code"], r["field"]
+        if code in ("suspected_prompt_injection", "playbook_deviation", "playbook_unknown"):
+            continue
+        if code in ("field_unverified", "value_not_in_quote", "ocr_match_below_trust"):
+            flags.append(Flag(kind="unverified", label=f"Unverified: {_words(field or '')}"))
+        elif code in ("low_field_confidence", "field_missing", "absent_but_mentioned"):
+            flags.append(
+                Flag(kind="other", label=f"{_words(code).capitalize()}: {_words(field or '')}")
+            )
+        else:
+            flags.append(Flag(kind="other", label=_words(code).capitalize()))
+    seen, unique = set(), []
+    for f in flags:  # a field can fail several checks; say it once
+        if f.label not in seen:
+            seen.add(f.label)
+            unique.append(f)
+    return unique
 
 
 def _document(session: Session, document_id: uuid.UUID) -> Document:
@@ -84,17 +146,30 @@ def queue(
         query = query.where(Document.status == status)
     items = []
     for doc, extraction in session.execute(query):
-        results = (extraction.playbook_results if extraction else None) or []
-        reasons = extraction.review_reasons if extraction else []
+        flags = flags_for(extraction)
         items.append(
             QueueItem(
                 **DocumentOut.model_validate(doc).model_dump(),
-                flags=sorted({r["code"] for r in reasons}),
-                deviations=sum(r["outcome"] == "deviation" for r in results),
-                unknowns=sum(r["outcome"] == "unknown" for r in results),
+                label=display_label(extraction.fields if extraction else {}, doc.filename),
+                flags=flags,
             )
         )
+
+    # Needs-review documents first by severity (injection, deviations, unknown/unverified, the
+    # rest), then newest first. The query is already newest first and the sort is stable.
+    def severity(item: QueueItem) -> int:
+        if item.status != Status.NEEDS_REVIEW:
+            return len(SEVERITY)
+        return min((SEVERITY[f.kind] for f in item.flags), default=len(SEVERITY))
+
+    items.sort(key=severity)
     return items
+
+
+@router.get("/counts", response_model=dict[str, int])
+def counts(session: Annotated[Session, Depends(get_session)]) -> dict[str, int]:
+    rows = session.execute(select(Document.status, func.count()).group_by(Document.status))
+    return {status: n for status, n in rows}
 
 
 @router.get("/documents/{document_id}", response_model=ReviewDetail)
@@ -132,6 +207,7 @@ def detail(document_id: uuid.UUID, session: Annotated[Session, Depends(get_sessi
     ).all()
     return ReviewDetail(
         **DocumentOut.model_validate(doc).model_dump(),
+        label=display_label(stored, doc.filename),
         fields=fields,
         playbook_results=extraction.playbook_results if extraction else None,
         review_reasons=extraction.review_reasons if extraction else [],

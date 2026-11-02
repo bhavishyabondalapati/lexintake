@@ -87,7 +87,8 @@ export function DocumentReview({ id }: { id: string }) {
           </Link>
           <div className="mt-1 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="truncate text-base font-semibold text-zinc-900">{doc.filename}</h1>
+              <h1 className="truncate text-base font-semibold text-zinc-900">{doc.label}</h1>
+              <p className="truncate text-xs text-zinc-400">{doc.filename}</p>
               <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
                 <StatusBadge status={doc.status} />
                 <span>{doc.doc_type?.replace("_", " ") ?? "unclassified"}</span>

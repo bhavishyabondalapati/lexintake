@@ -7,7 +7,11 @@ test("queue -> needs_review NDA -> see the deviation -> approve", async ({ page 
   // The queue opens on "Needs review".
   await expect(page.getByRole("tab", { name: "Needs review" })).toHaveAttribute("aria-selected", "true");
 
-  await page.getByRole("link", { name: "angle_brackets_nda.pdf" }).click();
+  // The row is labelled with the counterparty, the file name sits under it, and the flag names
+  // the rule that failed.
+  const row = page.getByRole("row", { name: /angle_brackets_nda\.pdf/ });
+  await expect(row.getByText("Residuals clause")).toBeVisible();
+  await row.getByRole("link").click();
 
   // The playbook result: the residuals rule is a deviation, and the reason is shown.
   const rule = page.getByTestId("rule-no_residuals");
@@ -25,5 +29,5 @@ test("queue -> needs_review NDA -> see the deviation -> approve", async ({ page 
 
   // It left the review queue.
   await page.getByRole("link", { name: "← Queue" }).click();
-  await expect(page.getByRole("link", { name: "angle_brackets_nda.pdf" })).toHaveCount(0);
+  await expect(page.getByText("angle_brackets_nda.pdf")).toHaveCount(0);
 });
