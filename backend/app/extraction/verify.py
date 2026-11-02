@@ -64,10 +64,15 @@ INJECTION_SIGNALS: dict[str, re.Pattern[str]] = {
         r"earlier|preceding)\s+(?:instructions|prompts?|rules)",
         re.I,
     ),
+    # Text that speaks TO the model ("note to the AI", "you are an assistant"). A mere mention of
+    # AI ("shall not use it to train AI models") is not an attack and must not match.
     "addressed_to_ai": re.compile(
-        r"\b(?:note|message|instructions?)\s+(?:to|for)\s+(?:the\s+|any\s+)?(?:ai|llm|model|"
-        r"assistant|language\s+model|automated\s+reviewer)s?\b|\bai\s+(?:reviewers?|systems?|"
-        r"assistants?|models?)\b",
+        r"\b(?:note|message|instructions?|reminder)\s+(?:to|for)\s+(?:the\s+|any\s+|all\s+)?"
+        r"(?:ai|llm|model|assistant|chatbot|language\s+model|automated\s+reviewer)s?\b",
+        re.I,
+    ),
+    "you_are_an_assistant": re.compile(
+        r"\byou\s+are\s+(?:now\s+)?(?:an?|the)\s+(?:ai|assistant|language\s+model|llm|chatbot)\b",
         re.I,
     ),
     "fake_system_message": re.compile(
