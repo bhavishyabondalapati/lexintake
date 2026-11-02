@@ -9,7 +9,7 @@ import httpx2
 import pytest
 
 from app.config import Settings
-from app.extraction.anthropic_extractor import AnthropicExtractor
+from app.extraction.anthropic_extractor import AnthropicExtractor, request_params
 from app.extraction.base import LlmCallFailed, plan_classify, plan_extract
 from app.extraction.doctext import BlockText, doc_text_from_blocks
 from app.extraction.pricing import (
@@ -200,3 +200,11 @@ def test_schema_too_large_for_the_grammar_falls_back_to_a_plain_json_request():
     assert first.outcome == second.outcome == LlmOutcome.OK  # a code fence is tolerated
     assert [("format" in r["output_config"]) for r in stub.requests] == [True, False, False]
     assert "JSON Schema" in stub.requests[1]["messages"][0]["content"]
+
+
+def test_requests_carry_no_sampling_parameters():
+    # The current models don't take temperature / top_p / top_k (the SDK has no such argument
+    # any more), so results vary a little between runs and the eval is a single run.
+    params = request_params(plan_classify(SETTINGS, DOC))
+
+    assert not {"temperature", "top_p", "top_k"} & params.keys()

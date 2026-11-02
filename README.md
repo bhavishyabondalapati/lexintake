@@ -779,6 +779,12 @@ scope, 1 suspected prompt injection, 4 real playbook deviations, and the rest be
 confidence on a field was below the threshold even though the answer was right. Cost: $0.0078 per
 document on average ($0.019 per NDA with Sonnet, $0.0003 for the others with Haiku).
 
+**Results vary a little between runs.** The current Claude models don't accept `temperature`
+(the SDK has no such argument), so a rerun can answer differently. The same 20 documents run twice
+(live, then through the Batch API) gave identical results for 16 documents and differed on 4: an
+extra value-not-in-quote review, an OCR spacing slip in a name, and two low-confidence flags. So the
+evaluation below is a **single run**, and small differences between percentages are noise.
+
 Full evaluation (ContractNLI, the 500-document manifest) comes in Phase 7.
 
 ## How it was built
