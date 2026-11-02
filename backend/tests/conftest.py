@@ -9,6 +9,7 @@ a service container. TEST_DATABASE_URL overrides the default address.
 import os
 from pathlib import Path
 
+import anthropic
 import pytest
 from alembic.config import Config
 from dotenv import dotenv_values
@@ -22,6 +23,17 @@ from app.models import Base
 
 BACKEND = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+@pytest.fixture(autouse=True)
+def no_real_anthropic_api(monkeypatch):
+    """Tests never call the real API. Building a real client fails loudly, and there is no key."""
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("a test tried to create a real Anthropic client; use FakeExtractor")
+
+    monkeypatch.setattr(anthropic.Anthropic, "__init__", refuse)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
 
 def _test_database_url() -> str:
