@@ -139,3 +139,19 @@ def test_get_document_returns_status_and_block_count(client):
 
 def test_get_unknown_document_is_404(client):
     assert client.get("/documents/00000000-0000-0000-0000-000000000000").status_code == 404
+
+
+def test_get_document_shows_type_and_why_it_needs_review(client):
+    from tests.docs import NDA, add_parsed_doc
+    from tests.fakes import FakeExtractor
+    from tests.test_extract_run import _run
+
+    doc_id = add_parsed_doc(NDA)
+    _run(doc_id, FakeExtractor(NDA, fields={"term_months": {"confidence": 0.5}}))
+
+    body = client.get(f"/documents/{doc_id}").json()
+
+    assert (body["status"], body["doc_type"], body["doc_subtype"]) == ("needs_review", "nda", None)
+    assert body["review_reasons"] == [
+        {"code": "low_field_confidence", "field": "term_months", "detail": "0.50 < 0.8"}
+    ]

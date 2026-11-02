@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.intake import IntakeRejected, ingest_file
-from app.models import Document, IntakeSource, TextBlock
+from app.models import Document, Extraction, IntakeSource, TextBlock
 from app.queue import enqueue_parse
 from app.storage.blobs import CHUNK, BlobStore, LocalBlobStore
 
@@ -37,6 +37,8 @@ class DocumentOut(BaseModel):
     error: str | None
     retry_count: int
     page_count: int | None
+    doc_type: str | None
+    doc_subtype: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -47,6 +49,8 @@ class UploadOut(DocumentOut):
 
 class DocumentDetail(DocumentOut):
     block_count: int
+    # Why the document went to needs_review (empty when extracted or not extracted yet).
+    review_reasons: list[dict] = []
 
 
 def get_blob_store(settings: Annotated[Settings, Depends(get_settings)]) -> BlobStore:
@@ -110,5 +114,8 @@ def get_document(
     count = session.scalar(
         select(func.count()).select_from(TextBlock).where(TextBlock.document_id == doc.id)
     )
+    reasons = session.scalar(
+        select(Extraction.review_reasons).where(Extraction.document_id == doc.id)
+    )
     base = DocumentOut.model_validate(doc).model_dump()
-    return DocumentDetail(**base, block_count=count or 0)
+    return DocumentDetail(**base, block_count=count or 0, review_reasons=reasons or [])
