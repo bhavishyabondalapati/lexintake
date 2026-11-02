@@ -65,6 +65,7 @@ def main() -> int:
         return 1
 
     deadline = time.monotonic() + args.timeout
+    doc = get(args.api, doc["id"])  # the upload reply has no block_count
     while doc["status"] not in ("parsed", "failed"):
         if time.monotonic() > deadline:
             print(f"timed out waiting for parsing (last status: {doc['status']})")
