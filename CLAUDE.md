@@ -1,7 +1,7 @@
 # LexIntake — Legal Document Intake & Triage for a PE Legal Team
 
 ## What this is
-An automated intake pipeline for the legal team at a mid-market private equity firm (modeled on a firm like H.I.G. Capital: thousands of deals, constant inflow of NDAs, confidentiality agreements, investor documents and notices, ~hundreds of GB per year).
+An automated intake pipeline for the legal team at a mid-market private equity firm (thousands of deals, constant inflow of NDAs, confidentiality agreements, investor documents and notices, ~hundreds of GB per year).
 
 Documents arrive by email attachment, scanned mail, or a SharePoint drop. Today lawyers read each one, decide what it is, check it against their standards, file it, and track it by hand. LexIntake does the first pass so lawyers only review what's flagged.
 
