@@ -1,7 +1,7 @@
 .PHONY: dev down install test test-slow smoke requeue lint format requirements data data-cuad synthetic \
-	parse-quality ingest-smoke eval
+	parse-quality ingest-smoke extract extract-preview eval
 
-dev: ## Start the whole stack (db, redis, migrate, api, watcher, worker, frontend)
+dev: ## Start the whole stack (db, redis, migrate, api, watcher, worker, extractor, frontend)
 	mkdir -p inbox
 	docker compose up --build
 
@@ -49,6 +49,14 @@ parse-quality: ## Parse the synthetic set; report evidence hit rates and the des
 
 ingest-smoke: ## Send 20 ContractNLI PDFs through the running stack and report crashes
 	PYTHONPATH=backend uv run --project backend python -m scripts.ingest_smoke
+
+extract: ## Classify + extract parsed documents. CALLS THE ANTHROPIC API (LIMIT=20, MAX_SPEND=...)
+	docker compose exec api python -m app.cli extract --limit $${LIMIT:-20} \
+		$${MAX_SPEND:+--max-spend $$MAX_SPEND}
+
+extract-preview: ## 20 synthetic docs through the stack + preview report. CALLS THE API (MAX_SPEND=1.00)
+	PYTHONPATH=backend uv run --project backend python -m scripts.extract_preview \
+		--max-spend $${MAX_SPEND:-1.00}
 
 eval: ## Run the evaluation harness (Phase 7)
 	@echo "Evaluation harness not built yet (Phase 7)."

@@ -1,7 +1,7 @@
 # Local dev stack. Values fall back to dev defaults so `docker compose up` works without a .env.
 #
 # Two backend images, from targets in backend/Dockerfile:
-#   lexintake-api     small: api, watcher, migrate
+#   lexintake-api     small: api, watcher, migrate, extractor
 #   lexintake-worker  big:   Celery parse worker (Docling, CPU-only torch, models baked in)
 x-backend-env: &backend-env
   DATABASE_URL: postgresql://${POSTGRES_USER:-lexintake}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-lexintake}
@@ -124,6 +124,29 @@ services:
       timeout: 20s
       retries: 8
       start_period: 30s
+
+  # Classification + extraction (calls the Anthropic API). Lean api image: it doesn't need Docling.
+  # It only gets work when EXTRACT_ON_PARSE=true (off by default, so uploads never spend money by
+  # themselves) or when something queues it; `make extract` runs the same code in the foreground.
+  extractor:
+    <<: *api-image
+    command:
+      - celery
+      - -A
+      - app.worker
+      - worker
+      - -Q
+      - extract
+      - --loglevel=info
+      - --concurrency=${EXTRACTOR_CONCURRENCY:-4}
+    environment: *backend-env
+    depends_on: *after-migrate
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker inspect ping -d celery@$$HOSTNAME --timeout 5"]
+      interval: 15s
+      timeout: 20s
+      retries: 8
+      start_period: 15s
 
   # Slow tests with real Docling, in the same image the worker uses. Not started by `up`:
   #   make test-slow   (= docker compose --profile test run --rm --build worker-test)
