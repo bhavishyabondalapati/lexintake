@@ -43,7 +43,7 @@ from app.extraction.base import (
     plan_extract,
 )
 from app.extraction.doctext import DocText, load_doc_text
-from app.extraction.pricing import SpendGuard
+from app.extraction.pricing import SpendGuard, worst_case_usd
 from app.extraction.route import classification_reasons
 from app.extraction.run import Outcome, RunContext, run_extraction
 from app.extraction.schemas import Classification
@@ -53,6 +53,11 @@ from app.models import LlmStep
 log = logging.getLogger(__name__)
 
 BATCH_PRICE_FACTOR = Decimal("0.5")
+# The spend cap is checked against a bound that assumes a call writes at most this many output
+# tokens (about 3x what the preview runs showed: classify ~60, NDA extract ~850, other ~450).
+# Checking against max_tokens would refuse any sensible run: 8,000 output tokens per NDA is not
+# what these models write for a 10-field JSON answer. `plan-only` prints both numbers.
+OUTPUT_BOUND = {"classify": 400, "extract_nda": 2_500, "extract_other": 1_200}
 POLL_SECONDS = 30
 
 
@@ -225,7 +230,7 @@ class BatchRunner:
         return outcomes
 
     def _check_spend(self, plans: Iterable[CallPlan], max_spend: Decimal, what: str) -> None:
-        worst = sum((p.worst_case_usd for p in plans), Decimal(0)) * BATCH_PRICE_FACTOR
+        worst = sum((budget_bound(p) for p in plans), Decimal(0))
         spent = self.state.get("_committed", "0")
         total = Decimal(spent) + worst
         if f"{what}-checked" in self.state:
@@ -240,19 +245,31 @@ class BatchRunner:
         self._save_state()
 
 
-def worst_case_estimate(
-    settings: Settings, docs: dict[uuid.UUID, DocText]
-) -> tuple[Decimal, Decimal]:
-    """(classify, extract) worst case at batch prices, assuming every document is extracted (as an
-    NDA when it is long and legal-looking, which is only an upper bound: NDAs cost the most)."""
-    classify = sum((plan_classify(settings, d).worst_case_usd for d in docs.values()), Decimal(0))
+def budget_bound(plan: CallPlan) -> Decimal:
+    """What a call can cost at batch prices if it writes up to OUTPUT_BOUND tokens."""
+    if plan.step == LlmStep.CLASSIFY:
+        bound = OUTPUT_BOUND["classify"]
+    else:
+        bound = OUTPUT_BOUND["extract_nda" if plan.max_tokens > 3_000 else "extract_other"]
+    return worst_case_usd(plan.model, plan.estimated_input_tokens, min(plan.max_tokens, bound)) * (
+        BATCH_PRICE_FACTOR
+    )
+
+
+def cost_estimates(settings: Settings, docs: dict[uuid.UUID, DocText]) -> dict[str, Decimal]:
+    """For `--plan-only`, assuming every document is an NDA (the most expensive type): the budget
+    bound used for the spend cap, and the hard worst case where every call fills max_tokens."""
     from app.extraction.schemas import DocType
 
-    extract = sum(
-        (plan_extract(settings, d, DocType.NDA, None).worst_case_usd for d in docs.values()),
-        Decimal(0),
-    )
-    return classify * BATCH_PRICE_FACTOR, extract * BATCH_PRICE_FACTOR
+    plans = [
+        p
+        for d in docs.values()
+        for p in (plan_classify(settings, d), plan_extract(settings, d, DocType.NDA, None))
+    ]
+    return {
+        "budget_bound": sum((budget_bound(p) for p in plans), Decimal(0)),
+        "hard_worst_case": sum((p.worst_case_usd for p in plans), Decimal(0)) * BATCH_PRICE_FACTOR,
+    }
 
 
 def _outcome(raw: dict) -> dict:

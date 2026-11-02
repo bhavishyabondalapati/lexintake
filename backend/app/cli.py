@@ -148,7 +148,7 @@ def _print_run(run: ExtractRun) -> None:
 def run_batch_cli(settings: Settings, args: argparse.Namespace) -> None:
     import anthropic
 
-    from app.extraction.batch import BatchRunner, worst_case_estimate
+    from app.extraction.batch import BatchRunner, cost_estimates
     from app.extraction.doctext import load_doc_text
 
     max_spend = Decimal(
@@ -158,10 +158,12 @@ def run_batch_cli(settings: Settings, args: argparse.Namespace) -> None:
     if args.plan_only:
         with session_scope() as session:
             docs = {i: load_doc_text(session, i) for i in ids}
-        classify, extract = worst_case_estimate(settings, docs)
+        est = cost_estimates(settings, docs)
         print(
-            f"{len(ids)} documents. Worst case at batch prices: classify ${classify:.4f} + "
-            f"extract ${extract:.4f} (if every document were an NDA) = ${classify + extract:.4f}"
+            f"{len(ids)} documents, every one counted as an NDA (the most expensive type), batch "
+            f"prices:\n  budget bound (what --max-spend is checked against): "
+            f"${est['budget_bound']:.4f}\n  hard worst case (every call fills max_tokens, which "
+            f"these models don't do): ${est['hard_worst_case']:.4f}"
         )
         return
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
