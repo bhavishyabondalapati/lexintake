@@ -117,7 +117,7 @@ def test_batch_routes_like_the_live_path_and_records_half_price(db, tmp_path):
 
     assert outcomes[ids["syn_00010"]].result == "auto_approved"
     assert len(stub.created) == 2  # one classify batch, one extract batch
-    assert {r["custom_id"].split(":")[1] for r in stub.created[1]} == {"extract"}
+    assert {r["custom_id"].rsplit("_", 1)[1] for r in stub.created[1]} == {"extract"}
     with session_scope() as session:
         calls = session.scalars(select(LlmCall)).all()
         assert len(calls) == 4
@@ -149,7 +149,7 @@ def test_a_request_the_api_rejects_for_grammar_size_is_resubmitted_without_it(db
 
 def test_a_failed_request_fails_that_document_only(db, tmp_path):
     ids, by_id = prepare()
-    bad = f"{ids['syn_00010']}:extract"
+    bad = f"{ids['syn_00010']}_extract"
     stub = StubBatches(by_id.get, errors=[bad])
 
     outcomes = runner(tmp_path, stub).run(list(ids.values()), Decimal("5"))
@@ -179,7 +179,7 @@ def test_a_stopped_run_resumes_without_submitting_again(db, tmp_path):
 def test_batch_requests_are_bounded_and_a_truncated_answer_goes_to_review(db, tmp_path):
     ids, by_id = prepare()
     nda = ids["syn_00010"]
-    stub = StubBatches(by_id.get, truncate=[f"{nda}:extract"])
+    stub = StubBatches(by_id.get, truncate=[f"{nda}_extract"])
     run_id = uuid.uuid4()
 
     outcomes = runner(tmp_path, stub).run(list(ids.values()), Decimal("5"), run_id)
@@ -187,8 +187,8 @@ def test_batch_requests_are_bounded_and_a_truncated_answer_goes_to_review(db, tm
     classify, extract = stub.created
     assert {r["params"]["max_tokens"] for r in classify} == {400}
     sent = {r["custom_id"]: r["params"]["max_tokens"] for r in extract}
-    assert sent[f"{nda}:extract"] == 2_500  # NDA fields
-    assert sent[f"{ids['syn_00002']}:extract"] == 1_200  # the small field set of another type
+    assert sent[f"{nda}_extract"] == 2_500  # NDA fields
+    assert sent[f"{ids['syn_00002']}_extract"] == 1_200  # the small field set of another type
 
     assert outcomes[nda].result == "needs_review"
     assert [r.code for r in outcomes[nda].reasons] == ["truncated"]

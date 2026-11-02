@@ -93,11 +93,11 @@ def bounded(plan: CallPlan) -> CallPlan:
 
 
 def custom_id(document_id: uuid.UUID, step: LlmStep) -> str:
-    return f"{document_id}:{step.value}"
+    return f"{document_id}_{step.value}"  # the API allows only letters, digits, - and _
 
 
 def split_custom_id(value: str) -> tuple[uuid.UUID, str]:
-    document_id, step = value.split(":")
+    document_id, step = value.rsplit("_", 1)
     return uuid.UUID(document_id), step
 
 
