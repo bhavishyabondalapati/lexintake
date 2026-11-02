@@ -36,6 +36,8 @@ SYNTHETIC = ROOT / "data" / "synthetic"
 FIXTURES = ROOT / "backend" / "tests" / "fixtures"
 REPORTS = ROOT / "data" / "reports"
 RECORD_DIR = FIXTURES / "llm"
+DOCS = ROOT / "docs"
+DRY_RUN_DB = "lexintake_dryrun"
 SEED = 42
 
 # How many of each kind to pick: (doc_type, scanned) -> count.
@@ -535,6 +537,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--dry-run", action="store_true", help="upload + parse + worst case only")
     parser.add_argument("--report-only", action="store_true", help="no API calls; rebuild report")
     parser.add_argument(
+        "--fake", action="store_true", help="NO API: fake extractor in a throwaway database"
+    )
+    parser.add_argument(
         "--run", type=uuid.UUID, help="with --report-only: count only this run's cost"
     )
     parser.add_argument(
@@ -563,6 +568,14 @@ def main(argv: list[str] | None = None) -> None:
     )
     if args.dry_run:
         return
+    if args.fake:
+        outcomes, run_id = fake_run(sample, ids)
+        print(f"fake run: {dict(Counter(outcomes.values()))}")
+        report = build_report(sample, ids, run_id)
+        DOCS.mkdir(exist_ok=True)
+        (DOCS / "phase3-dry-run.md").write_text(write_fake_markdown(report))
+        print(f"report: {DOCS / 'phase3-dry-run.md'}")
+        return
 
     run_id = args.run
     if not args.report_only:
@@ -575,6 +588,88 @@ def main(argv: list[str] | None = None) -> None:
     if args.record is not None:
         chosen = args.record or _default_recordings(sample)
         record_fixtures(sample, ids, chosen)
+
+
+def fake_run(sample: list[dict], ids: dict[str, uuid.UUID]) -> tuple[dict, uuid.UUID]:
+    """Run the whole pipeline with the FAKE extractor (no API calls) in a throwaway database.
+
+    The parsed documents are copied out of the dev database into `lexintake_dryrun`, so the dev
+    database stays untouched (its 20 documents stay `parsed`, ready for the real run). The fake
+    answers from the manifest like a perfect model, so this shows the checks and the routing, not
+    model accuracy.
+    """
+    from alembic.config import Config
+    from sqlalchemy import create_engine, insert, select, text
+    from sqlalchemy.engine import make_url
+
+    from alembic import command
+    from app import db as app_db
+    from app.config import get_settings
+    from app.extraction.pricing import SpendGuard
+    from app.extraction.run import RunContext, run_extraction
+    from app.models import Document, TextBlock
+    from tests.fakes import FakeExtractor
+
+    dev_url = app_db.sqlalchemy_url(os.environ["DATABASE_URL"])
+    with create_engine(dev_url).connect() as conn:
+        docs = [
+            dict(r._mapping)
+            for r in conn.execute(select(Document.__table__).where(Document.id.in_(ids.values())))
+        ]
+        blocks = [
+            dict(r._mapping)
+            for r in conn.execute(
+                select(TextBlock.__table__).where(TextBlock.document_id.in_(ids.values()))
+            )
+        ]
+
+    url = make_url(dev_url)
+    admin = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'DROP DATABASE IF EXISTS "{DRY_RUN_DB}" WITH (FORCE)'))
+        conn.execute(text(f'CREATE DATABASE "{DRY_RUN_DB}"'))
+    admin.dispose()
+    os.environ["DATABASE_URL"] = url.set(database=DRY_RUN_DB).render_as_string(hide_password=False)
+    get_settings.cache_clear()
+    app_db.get_engine.cache_clear()
+    app_db.get_sessionmaker.cache_clear()
+    config = Config(str(ROOT / "backend" / "alembic.ini"))
+    config.attributes["configure_logger"] = False
+    command.upgrade(config, "head")
+    with app_db.get_engine().begin() as conn:
+        for d in docs:
+            d["status"], d["doc_type"], d["doc_subtype"] = "parsed", None, None
+        conn.execute(insert(Document.__table__), docs)
+        for b in blocks:
+            b.pop("id")
+        conn.execute(insert(TextBlock.__table__), blocks)
+
+    run_id = uuid.uuid4()
+    ctx = RunContext(None, SpendGuard("1000"), get_settings(), run_id=run_id, actor="fake:dry-run")
+    outcomes = {}
+    for d in sample:
+        ctx.extractor = FakeExtractor(d)
+        outcomes[d["doc_id"]] = run_extraction(ids[d["doc_id"]], ctx, force=True).result
+    return outcomes, run_id
+
+
+def write_fake_markdown(report: dict) -> str:
+    banner = (
+        "> **FAKE-EXTRACTOR OUTPUT, NOT REAL ACCURACY.** No model was called. A test double"
+        " answered every document from the manifest's ground truth, quoting the manifest's evidence"
+        " sentences, like a perfect model would. These numbers show that the pipeline around the"
+        " model works: classification gate, citation checks, routing, the needs_review reasons,"
+        " the NDA guard, the prompt-injection check and the absent-clause scan. The token counts"
+        " and dollar amounts are made up by the fake (1,000 in / 200 out per call). Real accuracy"
+        " and cost come from `make extract-preview` (not run yet).\n\n"
+        "> Generated by `PYTHONPATH=backend uv run --project backend python -m"
+        " scripts.extract_preview --fake` on the 20 documents parsed by the real stack (real"
+        " Docling and OCR text).\n\n"
+    )
+    md = write_markdown(report)
+    title, rest = md.split("\n", 1)
+    title = title.replace("Extraction preview", "Phase 3 dry run (fake extractor)")
+    return f"{title}\n\n{banner}{rest}"
 
 
 def _default_recordings(sample: list[dict]) -> list[str]:
