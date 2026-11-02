@@ -14,6 +14,7 @@ import pytest
 
 from app.playbook import evaluate, load_playbook
 from scripts.generate_synthetic import generate, plan_documents
+from scripts.playbook_ground_truth import mismatches
 from scripts.synth.fields import OPTIONAL_NDA_FIELDS
 from scripts.synth.render import pdf_text
 
@@ -147,6 +148,13 @@ def test_deviations_match_the_playbook(docs):
     assert any(d["deviations"] == [] for d in ndas)
     broken = {rule for d in ndas for rule in d["deviations"]}
     assert broken == {rule.id for rule in playbook.rules}
+
+
+def test_checker_gives_exactly_the_manifest_deviations(docs):
+    checked, problems = mismatches(docs)
+
+    assert checked > 0
+    assert problems == []
 
 
 def test_exact_duplicates_share_a_hash(docs):
