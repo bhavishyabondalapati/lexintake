@@ -8,7 +8,9 @@ lawyers only review the documents that get flagged.
 > Independent portfolio project, not affiliated with any firm. It uses only public and synthetic
 > data.
 
-**Status:** Phase 0 (scaffold), Phase 1 (data) and Phase 2 (ingestion & parsing) are done. The pipeline is built phase by phase.
+**Status:** Phases 0–2 (scaffold, data, ingestion & parsing) are done. Phase 3 (classification &
+extraction) is built and tested with a fake extractor; its first real-model run is pending. The
+pipeline is built phase by phase.
 See [PROMPTS.md](PROMPTS.md).
 
 ## The problem
@@ -30,9 +32,13 @@ flowchart LR
     W --> Q
     Q --> K[Celery worker]
     K --> P[Parse<br/>Docling + OCR]
-    P --> C[Classify]
-    C --> E[Extract fields<br/>Claude via Extractor]
-    E --> PB[Playbook check]
+    P --> C[Classify<br/>cheap model]
+    C -->|NDA| E[Extract NDA fields<br/>stronger model]
+    C -->|other types| E2[Small field set<br/>cheap model]
+    E --> V[Check every quote<br/>against the parsed text]
+    E2 --> V
+    V -->|a check failed| R
+    V -->|all checks pass| PB[Playbook check]
     PB -->|all pass, high confidence| A[auto_approved]
     PB -->|deviation / unknown| R[needs_review]
     A --> S[StorageAdapter<br/>local folder / SharePoint]
@@ -45,7 +51,9 @@ flowchart LR
 
 Phase 0 builds the boxes that hold everything up: FastAPI, the Celery worker, Redis, Postgres
 with pgvector, and the Next.js app, all running together in Docker Compose. Phase 2 adds intake
-and parsing (below). Classification, extraction, the playbook check and review come in Phases 3–6.
+and parsing (below). Phase 3 adds classification, extraction and the citation checks
+([Classification & extraction](#classification--extraction-phase-3)). The playbook check and
+review come in Phases 4–6.
 
 ### Ingestion and parsing (Phase 2)
 
@@ -98,21 +106,21 @@ a row in `audit_log` in the same transaction. A duplicate upload writes an audit
 | **Docling** (`docling-slim`) | Layout-aware PDF parsing: it finds paragraphs, headings, list items and tables, with a bounding box and page for each one, in reading order. The `-slim` package lets the worker install only PDF + layout + OCR, not Office/audio support. |
 | **RapidOCR on onnxruntime** | Docling's default OCR engine: CPU-friendly, small models, and it doesn't need a second copy of torch (EasyOCR would). It reports a confidence score per page. |
 | **PyTorch, CPU-only build** | Docling's layout model runs on torch. The default Linux wheel bundles ~5 GB of NVIDIA CUDA libraries we never use, so the worker installs torch from PyTorch's CPU index instead. |
-| **rapidfuzz** | Fuzzy string matching for OCR output, where small character mistakes make exact matching useless. |
+| **rapidfuzz** | Fuzzy string matching for OCR output, where small character mistakes make exact matching useless. Phase 3 uses it in production code to check quotes from OCR'd pages. |
+| **Anthropic Python SDK** | Calls Claude for classification and extraction. Structured outputs make the reply follow a JSON schema built from our Pydantic models, prompt caching makes the fixed instructions cheap after the first call, and the SDK retries rate limits and server errors with backoff. Model names come only from `.env`. |
 
 **Dependency groups** (in `backend/pyproject.toml`) decide what goes where:
 
 | Group | Contents | Installed in |
 | --- | --- | --- |
-| main | FastAPI, SQLAlchemy, Alembic, Celery, watchfiles, ... | every image, and locally |
+| main | FastAPI, SQLAlchemy, Alembic, Celery, watchfiles, anthropic, rapidfuzz, ... | every image, and locally |
 | `parse` | Docling, CPU-only torch, RapidOCR | the worker image only (and locally with `--group parse`) |
-| `test` | pytest, httpx, rapidfuzz | locally, CI, and the worker-test image |
+| `test` | pytest, httpx | locally, CI, and the worker-test image |
 | `dev` | `test` + ruff + the data-script packages (Faker, ReportLab, ...) | locally and CI |
 
 A plain `uv sync` never downloads torch, so the fast tests and the backend CI job stay quick.
 
-Coming in later phases: the Anthropic SDK (classification and extraction) and Playwright
-(end-to-end tests for the dashboard).
+Coming in later phases: Playwright (end-to-end tests for the dashboard).
 
 ## File structure
 
@@ -123,12 +131,13 @@ lexintake/
 ├── README.md                     # This file
 ├── LICENSE                       # MIT license
 ├── Makefile                      # Shortcuts: make dev / test / test-slow / smoke / lint / ...
-├── docker-compose.yml            # db, redis, migrate, api, watcher, worker, frontend (+ worker-test)
+├── docker-compose.yml            # db, redis, migrate, api, watcher, worker, extractor, frontend (+ worker-test)
 ├── requirements.txt              # Pinned backend deps exported from uv.lock (CI checks it is in sync)
 ├── .env.example                  # Every env var the app reads, placeholder values only
 ├── .gitignore                    # Keeps .env, data/, .venv/, node_modules/ etc. out of git
 ├── .github/workflows/ci.yml      # CI on every push: backend (+Postgres), frontend, compose end-to-end
 ├── .github/workflows/slow-tests.yml # Real-Docling tests: parsing-related changes, nightly, on demand
+├── docs/phase3-dry-run.md        # Pipeline dry run with the FAKE extractor (checks + routing, not accuracy)
 ├── inbox/                        # Gitignored. Drop PDFs here; the watcher ingests them
 ├── db/init/01_extensions.sql     # Enables pgvector the first time Postgres starts
 ├── playbook/
@@ -140,6 +149,8 @@ lexintake/
 │   ├── parse_quality.py          # Evidence hit rates on the synthetic set + deskew experiment
 │   ├── ingest_smoke.py           # Sends ContractNLI's raw PDFs through the running stack
 │   ├── generate_synthetic.py     # CLI: plans the document mix, renders PDFs, writes the manifest
+│   ├── make_special_fixtures.py  # Builds the prompt-injection NDA and the angle-bracket NDA fixtures
+│   ├── extract_preview.py        # 20-doc preview vs the manifest (real API, or --fake / --dry-run)
 │   └── synth/
 │       ├── __init__.py           # Package docstring: how the three modules fit together
 │       ├── fields.py             # Samples ground-truth fields per document type
@@ -150,7 +161,7 @@ lexintake/
 │   ├── cuad/                     # Optional (make data-cuad)
 │   ├── downloads/                # Verified zip archives, kept so re-runs needn't download again
 │   ├── synthetic/                # docs/syn_00001.pdf ... and manifest.json
-│   └── reports/                  # parse_quality.{md,json}, ingest_smoke.{md,json}
+│   └── reports/                  # parse_quality, ingest_smoke, extract_preview (.md + .json)
 ├── backend/
 │   ├── pyproject.toml            # Backend dependencies + ruff and pytest settings
 │   ├── uv.lock                   # Exact pinned versions of every dependency
@@ -161,44 +172,67 @@ lexintake/
 │   ├── alembic/
 │   │   ├── env.py                # Runs migrations against DATABASE_URL (or a test connection)
 │   │   ├── script.py.mako        # Template for new migration files
-│   │   └── versions/0001_ingestion_tables.py # documents, text_blocks, audit_log
+│   │   ├── versions/0001_ingestion_tables.py # documents, text_blocks, audit_log
+│   │   └── versions/0002_extraction.py # new statuses, doc_type columns, extractions, llm_calls
 │   ├── app/
 │   │   ├── __init__.py           # Marks app/ as a package
 │   │   ├── config.py             # Settings read from env vars (DB, Redis, blobs, inbox, limits, ...)
 │   │   ├── main.py               # FastAPI app, CORS setup, GET /health, document routes
 │   │   ├── db.py                 # SQLAlchemy engine, session_scope(), FastAPI session dependency
-│   │   ├── models.py             # Tables: Document, TextBlock, AuditLog; Status enum
+│   │   ├── models.py             # Tables: Document, TextBlock, AuditLog, Extraction, LlmCall; enums
 │   │   ├── status.py             # transition(): the only place a status changes (+ audit row)
 │   │   ├── intake.py             # Shared intake: PDF check, hash, dedupe, store, audit, enqueue
-│   │   ├── queue.py              # Sends the parse task to Celery by name (no Docling import)
+│   │   ├── queue.py              # Sends the parse / extract tasks to Celery by name
 │   │   ├── watcher.py            # Inbox watcher with the file-stability check
-│   │   ├── cli.py                # python -m app.cli requeue: re-queue received/failed documents
+│   │   ├── cli.py                # app.cli requeue (failed step again) and extract (--limit, --max-spend)
 │   │   ├── playbook.py           # Loads the playbook YAML and evaluates NDA fields against it
 │   │   ├── worker.py             # Celery app, queue routing, `ping` task
-│   │   ├── routes/documents.py   # POST /documents (upload), GET /documents/{id}
+│   │   ├── routes/documents.py   # POST /documents (upload), GET /documents/{id} (+ type, review reasons)
 │   │   ├── storage/blobs.py      # BlobStore interface + LocalBlobStore (content-addressed)
 │   │   ├── parsing/
 │   │   │   ├── __init__.py       # get_parser(): builds the Docling parser once per process
 │   │   │   ├── base.py           # Parser interface, Block, ParseResult, ParseError
 │   │   │   ├── docling_parser.py # Per-page text-layer check, Docling passes, blocks with bboxes
 │   │   │   └── download_models.py # Downloads the models at image build time
-│   │   └── tasks/parse.py        # The Celery parse task: lock, claim, parse, save, audit
+│   │   ├── extraction/
+│   │   │   ├── schemas.py        # Pydantic models: doc types, per-subtype fields (= manifest), cited fields
+│   │   │   ├── doctext.py        # Parsed text per page, the shared normalize(), escaping for the prompt
+│   │   │   ├── prompts.py        # Fixed (cacheable) system prompts; the document fenced and escaped
+│   │   │   ├── base.py           # Extractor interface, CallPlan (model, prompts, schema), LlmResult
+│   │   │   ├── anthropic_extractor.py # The real Extractor: structured output, caching, error mapping
+│   │   │   ├── pricing.py        # $/MTok per model, cost of a call, worst case, SpendGuard
+│   │   │   ├── verify.py         # Quote checks (exact / fuzzy OCR), value in quote, keyword scans
+│   │   │   ├── route.py          # The rules that send a document to needs_review, with reasons
+│   │   │   └── run.py            # One document: lock, classify, extract, verify, route, save, audit
+│   │   └── tasks/
+│   │       ├── parse.py          # The Celery parse task: lock, claim, parse, save, audit
+│   │       └── extract.py        # The Celery extract task: daily spend cap, retries with backoff
 │   └── tests/
 │       ├── __init__.py           # Marks tests/ as a package
 │       ├── conftest.py           # Fresh lexintake_test database per run, migrated; per-test cleanup
-│       ├── fakes.py              # FakeParser and RecordingQueue, so unit tests never load Docling
+│       ├── fakes.py              # FakeParser, RecordingQueue, FakeExtractor (no Docling, no API)
+│       ├── docs.py               # Puts parsed test documents (from manifest entries) into the DB
 │       ├── test_migrations.py    # Tables exist; downgrade/upgrade works; models match migrations
 │       ├── test_status.py        # Allowed transitions write audit rows; others are refused
 │       ├── test_blobs.py         # Content-addressed paths, no-op re-put, atomic write
 │       ├── test_upload.py        # 201 new / 200 duplicate / 415 / 413 / concurrent duplicates
 │       ├── test_watcher.py       # Growing files wait; processed/rejected moves; retry on errors
 │       ├── test_parse_task.py    # Idempotency, redelivery, failures, poison guard, locks
-│       ├── test_cli.py           # requeue picks the right documents
+│       ├── test_cli.py           # requeue picks the right step; extract: --limit, spend cap, costs
+│       ├── test_schemas.py       # Field models match the manifest key for key; cited-field rules
+│       ├── test_prompts.py       # System prompts are fixed; documents can't break out of their tags
+│       ├── test_verify.py        # Exact/fuzzy quote matching, value in quote, absent-clause scan
+│       ├── test_anthropic_extractor.py # Request shape, usage/cache tokens, errors, prices (stub client)
+│       ├── test_extract_run.py   # The extract step end to end with the fake: every route and failure
+│       ├── test_extract_task.py  # Celery task: daily spend cap, retries then failed
+│       ├── test_injection.py     # Prompt-injection NDA can't get approved; AI mentions aren't flagged
+│       ├── test_extract_preview.py # The preview report's arithmetic on fake results
+│       ├── test_download_models.py # A model download that is really an error page fails the build
 │       ├── test_image_split.py   # The api image's dependencies contain no torch/Docling
-│       ├── fixtures/             # 5 synthetic PDFs (digital, scanned, duplicate pair) + manifest
+│       ├── fixtures/             # Synthetic PDFs (+ injection and angle-bracket NDAs) and manifests
 │       ├── integration/          # Slow tests with real Docling (pytest -m slow)
 │       ├── test_health.py        # /health returns ok; CORS allows the frontend, blocks others
-│       ├── test_config.py        # Env vars parse correctly (CORS list, model name)
+│       ├── test_config.py        # Env vars parse correctly (CORS list, two model names)
 │       ├── test_worker.py        # Celery ping task runs and is registered
 │       ├── test_playbook.py      # Each playbook rule catches its deviation; null handling
 │       ├── test_download_data.py # Checksum check, skip on re-run, zip-slip guard (no network)
@@ -276,6 +310,23 @@ Check parsing quality and robustness (Phase 2 reports, written to `data/reports/
 make parse-quality   # needs make synthetic; ~8 min on an M4 Pro (uses the GPU via MPS)
 make ingest-smoke    # needs make data and the stack running; 23 ContractNLI PDFs end to end
 ```
+
+Classify and extract (Phase 3). **`make extract` and `make extract-preview` call the Anthropic API
+and cost money**; set `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL_CLASSIFY` and
+`ANTHROPIC_MODEL_EXTRACT` in `.env` first. Uploads are never sent to the API by themselves
+(`EXTRACT_ON_PARSE=false`).
+
+```bash
+make extract LIMIT=20 MAX_SPEND=0.50   # classify + extract up to 20 parsed docs, stop before $0.50
+make extract-preview MAX_SPEND=1.00    # 20 fixed synthetic docs + report vs the manifest
+
+# Free, no API calls:
+PYTHONPATH=backend uv run --project backend python -m scripts.extract_preview --dry-run  # worst-case cost
+PYTHONPATH=backend uv run --project backend python -m scripts.extract_preview --fake     # fake extractor
+```
+
+`make extract` prints a table per step and model: calls, input/output tokens, cache writes and
+reads, and cost. `GET /documents/<id>` shows the type and, for `needs_review`, the reasons.
 
 Get the data (see [Data](#data) for what each one is):
 
@@ -537,6 +588,88 @@ target (e.g. try RapidOCR's medium model or Tesseract).
   back as `ocr` blocks (confidence 0.96–0.98). One "image-only" page was an empty table with just a
   page number, so it correctly gave no blocks.
 
+## Classification & extraction (Phase 3)
+
+> **Real-model accuracy and cost are still pending.** Everything below is built and tested with a
+> fake extractor, but the first real run (20 documents, `make extract-preview MAX_SPEND=1.00`)
+> hasn't been done yet. [docs/phase3-dry-run.md](docs/phase3-dry-run.md) shows the whole pipeline
+> on those 20 documents with the fake extractor: it proves the checks and routing work, not how
+> accurate a real model is.
+
+### What happens to a parsed document
+
+```
+parsed ──► extracting ──┬─► extracted      every check passed (Phase 4's playbook check comes next)
+                        ├─► needs_review   at least one check failed; the reasons are saved
+                        └─► failed         the API kept failing, or a setting is missing
+```
+
+1. **Classify** with the cheap model (`ANTHROPIC_MODEL_CLASSIFY`, e.g. Haiku): type, subtype,
+   confidence and a quote that shows the type (usually the title). If the type is in doubt, the
+   document goes to review right here, before paying for step 2.
+2. **Extract.** NDAs get the full 10 fields from the stronger model (`ANTHROPIC_MODEL_EXTRACT`,
+   e.g. Sonnet). Side letters, notices and the rest get their small field set (2–8 fields) from the
+   cheap model. The fields are exactly the manifest's, per subtype, so every type can be scored.
+3. **Check** every answer in code (below), then **route**. Every status change is in the audit log.
+
+Each field comes back as `{value, page, quote, confidence}`. `null` means the clause is absent,
+as in the manifest. The model is allowed to say "not found" instead of guessing.
+
+### The checks (nothing the model says is trusted until it passes)
+
+| Check | What it catches |
+| --- | --- |
+| The quote exists in the parsed text: exactly on text-layer pages, fuzzily (≥ 90) on OCR pages | Made-up quotes |
+| The value appears inside its own quote ("five (5) years" supports 60 months; dates in any common format) | A real quote next to an invented value |
+| Quotes found on another page | Page corrected and flagged, not rejected |
+| Output fits the Pydantic schema (page exists, a value always has a quote, confidence 0–1) | Broken or cut-off JSON: retried once, then review |
+| Confidence ≥ 0.8 (classification and fields), ≥ 0.9 plus match ≥ 95 for fields read by OCR | Answers the model itself doubts; OCR can drop a line and still report 0.98 |
+| **NDA guard:** ≥ 2 NDA signals in the text but not classified as an NDA | An NDA slipping past the NDA checks by being misclassified |
+| **Absent-clause scan:** the model says "no non-compete" but the text says "compete" | Missed clauses (no quote exists to check an absence) |
+| **Injection check:** text addressed to the model ("ignore previous instructions", "note to the AI", fake `</document>` tags) | A planted value whose quote *is* real |
+| Type `other`, a partial parse, or a refusal | Out of scope or unreliable input |
+
+The model's confidence can only push a document towards review, never past a failed check.
+
+### Documents are untrusted input
+
+The instructions live in the system prompt. The document goes in the user message inside
+`<document>` tags, with `<` and `>` in its text replaced by `‹` `›`, so it can't close the tag or
+fake a new one; quotes are turned back before checking. The most important defence is structural:
+the model's output has **no** status or approval field, so code alone decides the route, and every
+value must be quoted from the document. A test NDA with three planted attacks
+(`backend/tests/fixtures/injection_nda.pdf`) proves that a model that obeys them still can't get
+the document approved.
+
+### Cost control
+
+- Two models, both from `.env`: the cheap one sees every document, the strong one only NDAs.
+- **Prompt caching:** the fixed instructions are a cached prefix, so every call after the first
+  reads them at a tenth of the price or less. `llm_calls` saves cache reads and writes for every call.
+- **Every call is recorded** in `llm_calls` (tokens, cache tokens, cost, model as reported by the
+  API), including failed attempts. Cost per document per model is one `GROUP BY`.
+- **Spend cap:** before *every* call, the run checks spent-so-far + that call's worst case (all
+  input uncached + the full `max_tokens` of output) against `MAX_SPEND_USD`. Because it plans for
+  the worst case, a run can't go over the cap. The document it stops at goes back to `parsed`.
+- `--limit`, `EXTRACT_ON_PARSE=false` by default, and prices live in one file
+  (`app/extraction/pricing.py`). A model without a price refuses to run.
+- Retries: the SDK retries rate limits and server errors with backoff. The extract worker then
+  retries up to 3 more times with longer waits before marking the document `failed`.
+
+### Running the real preview (later)
+
+```bash
+# .env: ANTHROPIC_API_KEY, ANTHROPIC_MODEL_CLASSIFY, ANTHROPIC_MODEL_EXTRACT
+make dev
+PYTHONPATH=backend uv run --project backend python -m scripts.extract_preview --dry-run  # free
+make extract-preview MAX_SPEND=1.00                                                         # paid
+```
+
+The report (`data/reports/extract_preview.md`) shows classification accuracy, NDA recall,
+per-field exact match, span verification, review reasons, absent-clause flags, cache use and cost
+per document per model, all split digital vs scanned. The dry run estimates the worst case at
+$0.80 for the 20 documents; real calls use far fewer output tokens than the maximum.
+
 ## Evaluation results
 
 Coming in Phase 7.
@@ -568,6 +701,18 @@ Coming in Phase 7.
    renderer had no fonts in the slim image; switching to the pdfium backend fixed it, and a test now
    guards against it. Last, I set up CI (Postgres service, cached image builds, an end-to-end upload,
    a separate slow-test workflow) and wrote the quality and ContractNLI crash-test scripts.
+4. **Phase 3, classification & extraction.** I started with Pydantic models that match the
+   manifest key for key, and a test that validates all 500 manifest entries against them. Then a
+   migration for the new statuses, `extractions` and `llm_calls`. Next came the prompt builder
+   (fixed, cacheable system prompts; the document fenced and escaped) and the citation checks:
+   exact or fuzzy quote matching, the value-in-quote check, the absent-clause scan and the NDA
+   guard. Then the `Extractor` interface with the real Anthropic implementation and a fake for
+   tests, the pricing table and spend guard, the routing rules and the idempotent extract step,
+   tested end to end with the fake for every route and failure. Then the CLI, the Celery task
+   and the `extractor` service. Building a prompt-injection test NDA showed that a planted value
+   gets a *real* quote, so I added the injection check. Rebuilding the worker image showed the OCR
+   model host returning error pages saved as model files, so the build now checks the models.
+   Last, the preview script and a fake-extractor dry run on 20 documents. The real run is pending.
 
 ## Key concepts
 
@@ -661,6 +806,22 @@ Coming in Phase 7.
   things. The manifest uses `null` only for "absent" and leaves out fields that don't apply.
   Phase 3's "the model isn't sure" will be a separate confidence score, so grading never has to
   guess what a value means.
+- **Check the citation, not the model's word.** Every extracted value has to point at the exact
+  text it came from, and code checks that the text is really there and really contains the value.
+  The model's confidence is a hint that can send a document to a person; it can never approve one.
+- **Prompt injection.** A document is data from a stranger, and it may contain text written to
+  steer the model. Keep instructions and document apart (system prompt vs fenced user message),
+  give the model no output field that grants approval, and treat text addressed to the model as a
+  reason for human review.
+- **Structured outputs + validation.** The API can force JSON that matches a schema, but a reply
+  can still be cut off or break rules a JSON schema can't express (a page that doesn't exist). So
+  Pydantic validates again, and an invalid reply is retried once, then sent to review.
+- **Prompt caching is a prefix match.** The API reuses a cached prompt only if every byte before
+  the cache marker is identical, so the system prompts are constants with no dates or ids in them.
+- **Plan for the worst case when capping spend.** You don't know a call's cost until it returns,
+  so the guard compares the cap with the most the next call could cost.
+- **Model cascades.** A cheap model handles the easy, high-volume step (what is this?) and gates
+  the expensive one, so the strong model only reads the documents that need it.
 
 ## Known issues
 
