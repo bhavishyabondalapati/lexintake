@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { Box } from "@/lib/api";
 
-const SCALE = 1.3;
+const MAX_SCALE = 1.4;
 
 export type Highlight = {
   page: number | null;
@@ -20,7 +20,17 @@ type Rect = { left: number; top: number; width: number; height: number };
 // in the PDF's text layer can't break the match.
 const squash = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 
-function PdfPage({ pdf, number, highlight }: { pdf: PDFDocumentProxy; number: number; highlight: Highlight | null }) {
+function PdfPage({
+  pdf,
+  number,
+  highlight,
+  scale,
+}: {
+  pdf: PDFDocumentProxy;
+  number: number;
+  highlight: Highlight | null;
+  scale: number;
+}) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const first = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -33,24 +43,29 @@ function PdfPage({ pdf, number, highlight }: { pdf: PDFDocumentProxy; number: nu
 
   useEffect(() => {
     let cancelled = false;
+    let task: { cancel: () => void } | null = null;
     (async () => {
       const page = await pdf.getPage(number);
-      const viewport = page.getViewport({ scale: SCALE });
+      const viewport = page.getViewport({ scale });
       if (cancelled || !canvas.current) return;
       const ratio = window.devicePixelRatio || 1;
       canvas.current.width = viewport.width * ratio;
       canvas.current.height = viewport.height * ratio;
       setSize({ width: viewport.width, height: viewport.height });
-      await page.render({
+      const render = page.render({
         canvas: canvas.current,
         viewport,
         transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0],
-      }).promise;
+      });
+      task = render;
+      await render.promise;
     })().catch(() => {});
     return () => {
+      // A render still running at the old scale would paint over the new one.
       cancelled = true;
+      task?.cancel();
     };
-  }, [pdf, number]);
+  }, [pdf, number, scale]);
 
   // Digital pages: find the quote in the page's own text and box the text runs it covers.
   useEffect(() => {
@@ -59,7 +74,7 @@ function PdfPage({ pdf, number, highlight }: { pdf: PDFDocumentProxy; number: nu
       if (!quote || ocr || (cited !== null && cited !== number)) return setTextRects([]);
       const pdfjs = await import("pdfjs-dist");
       const page = await pdf.getPage(number);
-      const viewport = page.getViewport({ scale: SCALE });
+      const viewport = page.getViewport({ scale });
       const content = await page.getTextContent();
       const runs = content.items.filter((i) => "str" in i);
       let flat = "";
@@ -79,19 +94,19 @@ function PdfPage({ pdf, number, highlight }: { pdf: PDFDocumentProxy; number: nu
         runs.slice(from, to + 1).map((run) => {
           const t = pdfjs.Util.transform(viewport.transform, run.transform);
           const height = Math.hypot(t[2], t[3]);
-          return { left: t[4], top: t[5] - height, width: run.width * SCALE, height };
+          return { left: t[4], top: t[5] - height, width: run.width * scale, height };
         }),
       );
     })().catch(() => setTextRects([]));
     return () => {
       cancelled = true;
     };
-  }, [pdf, number, quote, ocr, cited]);
+  }, [pdf, number, quote, ocr, cited, scale]);
 
   const rects: Rect[] = ocr
     ? (boxes ?? [])
         .filter((b) => b.page === number)
-        .map((b) => ({ left: b.x0 * SCALE, top: b.y0 * SCALE, width: (b.x1 - b.x0) * SCALE, height: (b.y1 - b.y0) * SCALE }))
+        .map((b) => ({ left: b.x0 * scale, top: b.y0 * scale, width: (b.x1 - b.x0) * scale, height: (b.y1 - b.y0) * scale }))
     : textRects;
 
   useEffect(() => {
@@ -121,6 +136,22 @@ function PdfPage({ pdf, number, highlight }: { pdf: PDFDocumentProxy; number: nu
 export function PdfViewer({ url, highlight }: { url: string; highlight: Highlight | null }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState("");
+  const [scale, setScale] = useState(1);
+  const box = useRef<HTMLDivElement>(null);
+
+  // Fit the page to the pane, so nothing is cut off on a narrow window.
+  useEffect(() => {
+    if (!pdf || !box.current) return;
+    const el = box.current;
+    let width = 612;
+    void pdf.getPage(1).then((p) => {
+      width = p.getViewport({ scale: 1 }).width;
+      setScale(Math.min(MAX_SCALE, (el.clientWidth - 8) / width));
+    });
+    const watch = new ResizeObserver(() => setScale(Math.min(MAX_SCALE, (el.clientWidth - 8) / width)));
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [pdf]);
 
   useEffect(() => {
     let task: { destroy: () => Promise<void> } | null = null;
@@ -139,9 +170,9 @@ export function PdfViewer({ url, highlight }: { url: string; highlight: Highligh
   if (error) return <p className="p-6 text-sm text-red-700">Could not load the PDF: {error}</p>;
   if (!pdf) return <p className="p-6 text-sm text-zinc-500">Loading PDF…</p>;
   return (
-    <div>
+    <div ref={box}>
       {Array.from({ length: pdf.numPages }, (_, i) => (
-        <PdfPage key={i} pdf={pdf} number={i + 1} highlight={highlight} />
+        <PdfPage key={i} pdf={pdf} number={i + 1} highlight={highlight} scale={scale} />
       ))}
     </div>
   );

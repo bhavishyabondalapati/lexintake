@@ -23,6 +23,7 @@ RUN addgroup -S app && adduser -S app -G app
 # The standalone output contains only the files the server needs.
 COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static
+COPY --from=build --chown=app:app /app/public ./public
 USER app
 EXPOSE 3000
 CMD ["node", "server.js"]
