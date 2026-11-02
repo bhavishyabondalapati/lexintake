@@ -1,6 +1,7 @@
 """Summarise the playbook results in the throwaway dry-run database (made by
 `python -m scripts.extract_preview --fake`) into docs/phase4-dry-run.md. No API calls."""
 
+import argparse
 import os
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -12,10 +13,13 @@ from app.db import sqlalchemy_url
 from app.models import Document, Extraction
 from scripts.extract_preview import DRY_RUN_DB, _use_local_database
 
-OUT = Path(__file__).resolve().parents[1] / "docs" / "phase4-dry-run.md"
+OUT = Path(__file__).resolve().parents[1] / "docs" / "phase4-dry-run.md"  # default; see --out
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--out", type=Path, default=OUT, help="where to write the report")
+    out = parser.parse_args(argv).out
     _use_local_database()
     url = make_url(sqlalchemy_url(os.environ["DATABASE_URL"])).set(database=DRY_RUN_DB)
     with create_engine(url).connect() as conn:
@@ -76,8 +80,8 @@ def main() -> None:
     lines += ["", "## Review reasons (all documents)", "", "| Code | Count |", "|---|---|"]
     for code, n in reasons.most_common():
         lines.append(f"| `{code}` | {n} |")
-    OUT.write_text("\n".join(lines) + "\n")
-    print(OUT.read_text())
+    out.write_text("\n".join(lines) + "\n")
+    print(out.read_text())
 
 
 if __name__ == "__main__":

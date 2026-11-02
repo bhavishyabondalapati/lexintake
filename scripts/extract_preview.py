@@ -540,6 +540,11 @@ def main(argv: list[str] | None = None) -> None:
         "--fake", action="store_true", help="NO API: fake extractor in a throwaway database"
     )
     parser.add_argument(
+        "--out",
+        type=Path,
+        help="write the report here (a directory for a real run; a .md file for --fake)",
+    )
+    parser.add_argument(
         "--run", type=uuid.UUID, help="with --report-only: count only this run's cost"
     )
     parser.add_argument(
@@ -572,19 +577,21 @@ def main(argv: list[str] | None = None) -> None:
         outcomes, run_id = fake_run(sample, ids)
         print(f"fake run: {dict(Counter(outcomes.values()))}")
         report = build_report(sample, ids, run_id)
-        DOCS.mkdir(exist_ok=True)
-        (DOCS / "phase3-dry-run.md").write_text(write_fake_markdown(report))
-        print(f"report: {DOCS / 'phase3-dry-run.md'}")
+        target = args.out or DOCS / "phase3-dry-run.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(write_fake_markdown(report))
+        print(f"report: {target}")
         return
 
     run_id = args.run
     if not args.report_only:
         run_id = run_extraction(ids, args.max_spend)
     report = build_report(sample, ids, run_id)
-    REPORTS.mkdir(parents=True, exist_ok=True)
-    (REPORTS / "extract_preview.json").write_text(json.dumps(report, indent=2, default=str) + "\n")
-    (REPORTS / "extract_preview.md").write_text(write_markdown(report))
-    print(f"report: {REPORTS / 'extract_preview.md'}")
+    out_dir = args.out or REPORTS
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "extract_preview.json").write_text(json.dumps(report, indent=2, default=str) + "\n")
+    (out_dir / "extract_preview.md").write_text(write_markdown(report))
+    print(f"report: {out_dir / 'extract_preview.md'}")
     if args.record is not None:
         chosen = args.record or _default_recordings(sample)
         record_fixtures(sample, ids, chosen)
