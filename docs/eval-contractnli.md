@@ -2,6 +2,13 @@
 
 > One run. Real NDAs from the ContractNLI **test split** (CC BY 4.0). The sample is **label-stratified** (see below), so **overall accuracy is not reported**: it would mostly measure how many easy NotMentioned documents were sampled. Results are per class, with counts.
 
+## Main findings from real data
+
+1. **Schema flaw.** `return_destroy_days` (and `non_solicit_months`) conflate "no clause" with "clause without a deadline". Real NDAs often have the second; the synthetic data never did, so the synthetic evaluation could not show it. Future work: a separate `return_destroy` boolean, with the number of days optional.
+2. **Domain shift.** Real NDAs were not classified confidently as NDAs: 20 of 66 came back below the 0.8 threshold and went to review before extraction. The threshold was **deliberately not tuned on this test sample**; tuning it here would make the numbers meaningless.
+3. **The absent-clause keyword scan overfires on real NDAs.** It flagged 11 of 20 rendered NotMentioned documents (return/destroy wording appears in many clauses that are not a return/destroy obligation). It sends documents to review, so it costs reviewer time but lets nothing through.
+4. **No real NDA was auto-approved.** All 66 went to review. The system fails safe: when unsure, a person looks.
+
 ## What can and can't be scored
 
 ContractNLI labels each NDA against 17 hypotheses as Entailment (the contract says it), Contradiction (it says the opposite) or NotMentioned. Our pipeline extracts 10 NDA fields, mostly values (a counterparty, a date, a number of months). Only two fields correspond to a hypothesis, and only as **presence vs absence of the clause**:
@@ -75,11 +82,11 @@ Field `non_solicit_months`.
 
 | | Original PDF | Rendered |
 |---|---|---|
-| Classified as NDA | 27/32 (84%) | 29/34 (85%) |
+| Classified as NDA | 30/32 (94%) | 33/34 (97%) |
 | Auto-approved | 0/32 (0%) | 0/34 (0%) |
 | Sent to review | 32/32 (100%) | 34/34 (100%) |
-| Cost per document (batch) | $0.0068 | $0.0093 |
-| Truncated answers | 5 | 4 |
+| Cost per document (batch) | $0.0069 | $0.0094 |
+| Truncated at the first attempt (400-token bound) | 5 | 4 |
 
 Review reasons (documents):
 
@@ -87,10 +94,13 @@ Review reasons (documents):
 - `field_missing`: 37
 - `playbook_unknown`: 33
 - `low_field_confidence`: 32
+- `low_classification_confidence`: 20
 - `absent_but_mentioned`: 20
-- `low_classification_confidence`: 13
 - `value_not_in_quote`: 9
-- `truncated`: 9
-- `invalid_output`: 1
+- `invalid_output`: 3
 
-Total cost: $0.5347 for 66 documents.
+## The 9 documents that were re-run
+
+In the first run 9 classification answers were cut off at the 400-token bound I had set for batch classification (`truncated`), so those documents were not classified at all. They were **re-run with the classify bound raised to 800** (and extraction allowed to follow). The table above includes the re-run. Result: 7 were classified as NDA but with confidence between 0.35 and 0.6, below the 0.8 threshold, so they went to review before extraction; 2 answered type `other` without the required subtype (an invalid answer). None reached extraction. So the cut-off was a symptom: these are ambiguous documents (SEC exhibits, consent and data-use forms) that the classifier is unsure about, and a bigger bound did not change the routing.
+
+Total cost: $0.5384 for 66 documents.

@@ -185,7 +185,7 @@ def test_batch_requests_are_bounded_and_a_truncated_answer_goes_to_review(db, tm
     outcomes = runner(tmp_path, stub).run(list(ids.values()), Decimal("5"), run_id)
 
     classify, extract = stub.created
-    assert {r["params"]["max_tokens"] for r in classify} == {400}
+    assert {r["params"]["max_tokens"] for r in classify} == {800}
     sent = {r["custom_id"]: r["params"]["max_tokens"] for r in extract}
     assert sent[f"{nda}_extract"] == 1_500  # NDA fields
     assert sent[f"{ids['syn_00002']}_extract"] == 1_200  # the small field set of another type

@@ -827,22 +827,29 @@ clean PDF (easier than real files).
 | nda-18 non-solicit, Entailment | field filled in | 4/5 | 16/23 |
 | nda-18, NotMentioned | field filled in (false alarm) | 0/27 | 0/11 |
 
-Read this carefully:
-- **A third of the sample got no field answer at all** (22 of 66): 9 classification answers were cut
-  off at the 400-token bound I set, and 13 documents were sent to review before extraction because
-  the model was not confident enough that they were NDAs. They count as misses for Entailment.
-- **nda-16 recall is low largely because the field is a number of days.** Many real NDAs require
-  return or destruction without any deadline, so the field comes back empty. Counting "flagged as
-  mentioned" too lifts recall to 9/24 (original) and 6/13 (rendered), but that keyword scan also
-  flags 11/20 rendered NotMentioned documents, so it is not a fair detector.
+**Main findings from the real data:**
+1. **Schema flaw.** `return_destroy_days` conflates "no clause" with "clause without a deadline",
+   and `non_solicit_months` has the same problem. Real NDAs often have the second; the synthetic
+   data never did, so the synthetic evaluation could not show it. This is the main reason nda-16
+   recall is low. Future work: a separate `return_destroy` boolean, with the number of days optional.
+2. **Domain shift.** 20 of the 66 real NDAs were not classified confidently as NDAs (below the 0.8
+   threshold: 13 in the first run, 7 more among 9 documents whose first answer was cut off at a
+   400-token bound and that were re-run at 800), so they went to review before any field was
+   extracted. 2 more answered type `other` without a subtype. The threshold was deliberately **not
+   tuned on this test sample**. These documents count as misses for Entailment (22 of 66 got no
+   field answer).
+3. **The absent-clause keyword scan overfires on real NDAs.** Counting "flagged as mentioned" lifts
+   nda-16 recall to 9/24 (original) and 6/13 (rendered), but the scan also flags 11/20 rendered
+   NotMentioned documents. It costs reviewer time and lets nothing through.
+4. **No real NDA was auto-approved.** All 66 went to review: the system fails safe.
+
+Also:
 - **Small cells.** The 5 original-PDF non-solicit Entailment documents are all such documents in
   the test split (the dataset's limit). The 8 original-PDF nda-16 NotMentioned documents are a
   sample of 52 (our budget). Conclusions from cells this small are not safe.
-- Not one of the 66 real NDAs was auto-approved (all went to review): real NDAs trip at least one
-  check (a deviation, an unknown, or a low-confidence field).
 - ContractNLI cannot score the other eight NDA fields (counterparty, dates, term, governing law,
-  mutual, non-compete, residuals); the synthetic evaluation covers those. Cost: $0.0068 (original)
-  and $0.0093 (rendered) per document.
+  mutual, non-compete, residuals); the synthetic evaluation covers those. Cost: $0.0069 (original)
+  and $0.0094 (rendered) per document.
 
 
 ## How it was built
@@ -1007,9 +1014,9 @@ Read this carefully:
   tokens to the cache and read 238k of its 1.0M input tokens from it, so most of the input was
   paid at the full price. The system prompt is probably below the minimum cacheable length for
   that model. The saving would be small (a few percent of the cost).
-- **Classification answers can be cut off on real documents.** In the ContractNLI batch 9 of 66
-  hit the 400-token bound I set for batch classification. A higher bound for that step is a
-  one-line change; it was not re-run for lack of budget.
+- **Low classification confidence on real NDAs.** See finding 2 above. Raising the classify
+  bound from 400 to 800 tokens stopped the cut-offs but did not change the routing: those
+  documents are ambiguous to the classifier and still go to review.
 - **httpx deprecation warning in tests.** `pytest` prints a `StarletteDeprecationWarning` from
   FastAPI's `TestClient` saying `httpx` is deprecated there. It's harmless and all tests pass.
   The fix is left for later, until the suggested replacement package has been checked.

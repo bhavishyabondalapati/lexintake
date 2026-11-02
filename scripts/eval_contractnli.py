@@ -110,6 +110,7 @@ def load_results() -> list[dict]:
             calls = session.scalars(select(LlmCall).where(LlmCall.document_id == uid)).all()
             row = {
                 "id": key,
+                "uuid": uid,
                 "kind": info["kind"],
                 "file": info["file"],
                 "status": doc.status,
@@ -143,6 +144,24 @@ def build_report(rows: list[dict]) -> str:
         " **label-stratified** (see below), so **overall accuracy is not reported**: it would"
         " mostly measure how many easy NotMentioned documents were sampled. Results are per"
         " class, with counts.",
+        "",
+        "## Main findings from real data",
+        "",
+        '1. **Schema flaw.** `return_destroy_days` (and `non_solicit_months`) conflate "no clause"'
+        ' with "clause without a deadline". Real NDAs often have the second; the synthetic data'
+        " never did, so the synthetic evaluation could not show it. Future work: a separate"
+        " `return_destroy` boolean, with the number of days optional.",
+        "2. **Domain shift.** Real NDAs were not classified confidently as NDAs: "
+        f"{sum('low_classification_confidence' in r['reasons'] for r in rows)} of {len(rows)} came"
+        " back below the 0.8 threshold and went to review before extraction. The threshold was"
+        " **deliberately not tuned on this test sample**; tuning it here would make the numbers"
+        " meaningless.",
+        "3. **The absent-clause keyword scan overfires on real NDAs.** It flagged 11 of 20 rendered"
+        " NotMentioned documents (return/destroy wording appears in many clauses that are not a"
+        " return/destroy obligation). It sends documents to review, so it costs reviewer time but"
+        " lets nothing through.",
+        "4. **No real NDA was auto-approved.** All "
+        f"{len(rows)} went to review. The system fails safe: when unsure, a person looks.",
         "",
         "## What can and can't be scored",
         "",
@@ -243,13 +262,40 @@ def build_report(rows: list[dict]) -> str:
     line(
         "Cost per document (batch)", lambda d: f"${sum(r['cost'] for r in d) / max(1, len(d)):.4f}"
     )
-    line("Truncated answers", lambda d: str(sum(r["truncated"] for r in d)))
+    line(
+        "Truncated at the first attempt (400-token bound)",
+        lambda d: str(sum(r["truncated"] for r in d)),
+    )
     reasons: dict[str, int] = {}
     for r in rows:
         for code in r["reasons"]:
             reasons[code] = reasons.get(code, 0) + 1
     out += ["", "Review reasons (documents):", ""]
     out += [f"- `{c}`: {n}" for c, n in sorted(reasons.items(), key=lambda x: -x[1])]
+    rerun = (
+        json.loads((OUT / "cnli_rerun.json").read_text())
+        if (OUT / "cnli_rerun.json").exists()
+        else []
+    )
+    if rerun:
+        redone = [r for r in rows if r["uuid"] in rerun]
+        low = sum("low_classification_confidence" in r["reasons"] for r in redone)
+        bad = sum("invalid_output" in r["reasons"] for r in redone)
+        out += [
+            "",
+            "## The 9 documents that were re-run",
+            "",
+            f"In the first run {len(redone)} classification answers were cut off at the 400-token"
+            " bound I had set for batch classification (`truncated`), so those documents were not"
+            " classified at all. They were **re-run with the classify bound raised to 800** (and"
+            " extraction allowed to follow). The table above includes the re-run. Result: "
+            f"{low} were classified as NDA but with confidence between 0.35 and 0.6, below the 0.8"
+            f" threshold, so they went to review before extraction; {bad} answered type `other`"
+            " without the required subtype (an invalid answer). None reached extraction. So the"
+            " cut-off was a symptom: these are ambiguous documents (SEC exhibits, consent and"
+            " data-use forms) that the classifier is unsure about, and a bigger bound did not"
+            " change the routing.",
+        ]
     out += ["", f"Total cost: ${sum(r['cost'] for r in rows):.4f} for {len(rows)} documents."]
     return "\n".join(out) + "\n"
 

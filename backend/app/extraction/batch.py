@@ -56,7 +56,7 @@ BATCH_PRICE_FACTOR = Decimal("0.5")
 # Batch requests are sent with max_tokens cut to these bounds (about 3x what the preview runs
 # showed: classify ~60, NDA extract ~850, other ~450), so the cost bound is a true worst case. A
 # response that hits the limit is routed to needs_review as "truncated".
-OUTPUT_BOUND = {"classify": 400, "extract_nda": 1_500, "extract_other": 1_200}
+OUTPUT_BOUND = {"classify": 800, "extract_nda": 1_500, "extract_other": 1_200}
 POLL_SECONDS = 30
 
 
