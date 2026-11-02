@@ -861,6 +861,22 @@ Coming in Phase 7.
 - **Intermediate commit.** In this phase's history, the upload commit imports a constant from
   `app/worker.py` that only arrives two commits later. The branch tip is fine; bisecting across
   those two commits would hit an import error.
+- **Phase 3: the real 20-document preview hasn't been run.** Everything is tested with a fake
+  extractor (see [docs/phase3-dry-run.md](docs/phase3-dry-run.md)), so real-model accuracy and
+  cost are unknown. Next step: `make extract-preview MAX_SPEND=1.00` (worst case $0.80).
+- **Phase 3: replay fixtures from real responses still to be recorded.** After the real run,
+  `scripts.extract_preview --report-only --record` saves about six real responses plus their
+  parsed text to `backend/tests/fixtures/llm/`, so tests can replay real model output without
+  calling the API. Until then, the tests use only the fake extractor and a stub client.
+- **Phase 3 option: a free local-model Extractor.** A local model (for example one served by
+  Ollama) could sit behind the same `Extractor` interface (`call(plan, doc) -> LlmResult`) for
+  development runs that cost nothing. Not built; its accuracy would need the same preview report.
+- **Phase 3: the daily spend cap is per worker check.** With several extract workers running at
+  once, each checks the day's total before its own call, so together they can go a little over
+  the cap. `make extract` (one process) can't.
+- **Phase 3: the absent-clause and NDA-signal keyword lists are tuned on synthetic text.** They
+  fire on none of the synthetic non-NDAs, but real contracts phrase things in more ways, so expect
+  more review flags (and some misses) on real documents.
 
 ## License
 
