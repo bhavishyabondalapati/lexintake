@@ -44,8 +44,9 @@ def main() -> None:
     lines = [
         "# Phase 4 dry run (fake extractor)",
         "",
-        "> **FAKE-EXTRACTOR OUTPUT, NOT REAL ACCURACY.** No model was called. A test double answered"
-        " every document from the synthetic manifest's ground truth, like a perfect model would,"
+        "> **FAKE-EXTRACTOR OUTPUT, NOT REAL ACCURACY.** No model was called. A test double"
+        " answered every document from the synthetic manifest's ground truth, like a perfect"
+        " model would,"
         " so the playbook outcomes below are the manifest's deviations passing through the real"
         " pipeline (parse -> verify -> playbook check -> routing). They show the plumbing works,"
         " not how well a model reads NDAs. Real numbers need `make extract-preview` (not run).",
