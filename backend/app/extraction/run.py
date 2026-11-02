@@ -63,6 +63,7 @@ class RunContext:
     settings: Settings
     run_id: uuid.UUID | None = None
     actor: str = "worker:extract"
+    price_factor: Decimal = Decimal(1)  # 0.5 for the Batch API, which is half price
 
 
 @dataclass
@@ -249,9 +250,10 @@ class _Step:
                 usage.cache_write_tokens,
                 usage.cache_read_tokens,
             )
+            * self.ctx.price_factor
             if usage
             else Decimal(0)
-        )
+        ).quantize(Decimal("0.000001"))
         self.cost += cost
         self.ctx.guard.add(cost)
         err = result.error if result else error

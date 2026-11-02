@@ -41,25 +41,7 @@ class AnthropicExtractor:
         self._ungrammared: set[tuple[str, int]] = set()
 
     def _create(self, plan: CallPlan, strict: bool):
-        output_config: dict = {}
-        user = plan.user
-        if strict:
-            output_config["format"] = {"type": "json_schema", "schema": plan.schema}
-        else:
-            # Same schema, but asked for in words and checked by Pydantic afterwards.
-            user += (
-                "\n\nReturn only a JSON object (no prose, no code fence) that matches this JSON "
-                f"Schema:\n{json.dumps(plan.schema)}"
-            )
-        if plan.effort:
-            output_config["effort"] = plan.effort
-        return self.client.messages.create(
-            model=plan.model,
-            max_tokens=plan.max_tokens,
-            system=[{"type": "text", "text": plan.system, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": user}],
-            output_config=output_config,
-        )
+        return self.client.messages.create(**request_params(plan, strict))
 
     def call(self, plan: CallPlan, doc: DocText) -> LlmResult:
         started = time.monotonic()
@@ -87,22 +69,50 @@ class AnthropicExtractor:
             raise LlmCallFailed(f"{type(e).__name__}: {e}", retryable=True, model=plan.model) from e
         latency_ms = int((time.monotonic() - started) * 1000)
 
-        usage = response.usage
-        result = LlmResult(
-            outcome=LlmOutcome.OK,
-            model=response.model,
-            usage=Usage(
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                cache_write_tokens=usage.cache_creation_input_tokens or 0,
-                cache_read_tokens=usage.cache_read_input_tokens or 0,
-            ),
-            stop_reason=response.stop_reason,
-            request_id=getattr(response, "_request_id", None),
-            latency_ms=latency_ms,
-            raw_text=FENCE.sub("", "".join(b.text for b in response.content if b.type == "text")),
+        return result_from_message(response, plan, doc, latency_ms)
+
+
+def request_params(plan: CallPlan, strict: bool = True) -> dict:
+    """The Messages API parameters for a plan. The batch API takes the same ones."""
+    output_config: dict = {}
+    user = plan.user
+    if strict:
+        output_config["format"] = {"type": "json_schema", "schema": plan.schema}
+    else:
+        # Same schema, but asked for in words and checked by Pydantic afterwards.
+        user += (
+            "\n\nReturn only a JSON object (no prose, no code fence) that matches this JSON "
+            f"Schema:\n{json.dumps(plan.schema)}"
         )
-        return validate(result, plan, doc)
+    if plan.effort:
+        output_config["effort"] = plan.effort
+    return {
+        "model": plan.model,
+        "max_tokens": plan.max_tokens,
+        "system": [{"type": "text", "text": plan.system, "cache_control": {"type": "ephemeral"}}],
+        "messages": [{"role": "user", "content": user}],
+        "output_config": output_config,
+    }
+
+
+def result_from_message(response, plan: CallPlan, doc: DocText, latency_ms: int = 0) -> LlmResult:
+    """A Messages API response (or one batch result's message) -> a validated LlmResult."""
+    usage = response.usage
+    result = LlmResult(
+        outcome=LlmOutcome.OK,
+        model=response.model,
+        usage=Usage(
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_write_tokens=usage.cache_creation_input_tokens or 0,
+            cache_read_tokens=usage.cache_read_input_tokens or 0,
+        ),
+        stop_reason=response.stop_reason,
+        request_id=getattr(response, "_request_id", None),
+        latency_ms=latency_ms,
+        raw_text=FENCE.sub("", "".join(b.text for b in response.content if b.type == "text")),
+    )
+    return validate(result, plan, doc)
 
 
 def validate(result: LlmResult, plan: CallPlan, doc: DocText) -> LlmResult:

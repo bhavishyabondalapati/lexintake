@@ -11,6 +11,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
+from pathlib import Path
 
 from sqlalchemy import func, select
 
@@ -144,6 +145,34 @@ def _print_run(run: ExtractRun) -> None:
     print(f"total spent: ${run.spent:.6f}")
 
 
+def run_batch_cli(settings: Settings, args: argparse.Namespace) -> None:
+    import anthropic
+
+    from app.extraction.batch import BatchRunner, worst_case_estimate
+    from app.extraction.doctext import load_doc_text
+
+    max_spend = Decimal(
+        str(args.max_spend if args.max_spend is not None else settings.max_spend_usd)
+    )
+    ids = select_documents(args.limit, args.doc, args.force)
+    if args.plan_only:
+        with session_scope() as session:
+            docs = {i: load_doc_text(session, i) for i in ids}
+        classify, extract = worst_case_estimate(settings, docs)
+        print(
+            f"{len(ids)} documents. Worst case at batch prices: classify ${classify:.4f} + "
+            f"extract ${extract:.4f} (if every document were an NDA) = ${classify + extract:.4f}"
+        )
+        return
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
+    runner = BatchRunner(client, settings, args.batch)
+    run = ExtractRun(run_id=uuid.uuid4())
+    outcomes = runner.run(ids, max_spend, run.run_id, args.force)
+    run.results = {i: o.result for i, o in outcomes.items()}
+    run.spent = sum((o.cost_usd for o in outcomes.values()), Decimal(0))
+    _print_run(run)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -156,6 +185,18 @@ def main(argv: list[str] | None = None) -> None:
     )
     ex.add_argument("--doc", type=uuid.UUID, action="append", default=[], help="only this document")
     ex.add_argument("--force", action="store_true", help="re-run documents already extracted")
+    ex.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="with --batch: print the worst-case cost at batch prices and stop (no API calls)",
+    )
+    ex.add_argument(
+        "--batch",
+        type=Path,
+        metavar="WORKDIR",
+        help="use the Batch API (half price, results within hours); answers and batch ids are "
+        "kept in WORKDIR so a stopped run resumes without paying twice",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "requeue":
@@ -167,6 +208,9 @@ def main(argv: list[str] | None = None) -> None:
         from app.extraction.anthropic_extractor import AnthropicExtractor
 
         settings = get_settings()
+        if args.batch:
+            run_batch_cli(settings, args)
+            return
         run = extract(
             AnthropicExtractor(settings),
             settings,
