@@ -363,3 +363,17 @@ def test_auto_approved_nda_stores_all_passing_results_and_non_ndas_skip_the_play
     letter, letter_extraction, _, _ = _state(letter_id)
     assert letter_extraction.playbook_results is None
     assert letter.status in (Status.EXTRACTED, Status.NEEDS_REVIEW)  # Phase 3 routing, unchanged
+
+
+def test_failed_extraction_can_be_retried_even_after_a_duplicate_upload(db):
+    doc_id = add_parsed_doc(NDA)
+    error = LlmCallFailed("bad request", retryable=False)
+    assert _run(doc_id, FakeExtractor(NDA, error=error)).result == "failed"
+    with session_scope() as session:  # what re-uploading the same file writes
+        session.add(
+            AuditLog(
+                document_id=doc_id, from_status="failed", to_status="failed", actor="api:upload"
+            )
+        )
+
+    assert _run(doc_id, FakeExtractor(NDA)).result == "auto_approved"

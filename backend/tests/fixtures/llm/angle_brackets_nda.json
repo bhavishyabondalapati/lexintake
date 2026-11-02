@@ -1,0 +1,137 @@
+{
+  "doc_id": "angle_brackets_nda",
+  "scanned": false,
+  "truth": {
+    "doc_type": "nda",
+    "subtype": null,
+    "fields": {
+      "counterparty": "Okafor Analytics LLC",
+      "fund_party": "Bellhaven Equity Partners Fund IV, L.P.",
+      "effective_date": "2024-09-03",
+      "mutual": true,
+      "term_months": 24,
+      "governing_law": "New York",
+      "non_solicit_months": null,
+      "non_compete_months": null,
+      "residuals_clause": true,
+      "return_destroy_days": 15
+    }
+  },
+  "page_count": 2,
+  "blocks": [
+    {
+      "page": 1,
+      "text": "Mutual Confidentiality Agreement",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "This Mutual Confidentiality Agreement (this \"Agreement\") is entered into as of September 3, 2024 (the \"Effective Date\") by and between Bellhaven Equity Partners Fund IV, L.P. and Okafor Analytics LLC, a Indiana limited liability company (each, a \"Party\").",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "In connection with a possible negotiated transaction referred to as Project Copper (the \"Transaction\"), each Party may furnish the other Party with certain information concerning its business.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Confidential Information. \"Confidential Information\" means all non-public information, in any form, furnished by or on behalf of the disclosing Party in connection with the Transaction, together with all notes, analyses and other materials prepared by each Party that contain or reflect such information. Confidential Information does not include information that is or becomes generally available to the public other than through a breach of this Agreement.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Use and Non-Disclosure. Each Party shall use the Confidential Information solely for the purpose of evaluating the Transaction and shall not disclose it to any person other than its affiliates, partners, employees, financing sources and advisors who need to know it for that purpose (its \"Representatives\").",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Term. The obligations under this Agreement shall remain in effect for two (2) years from the Effective Date.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Residuals. Notwithstanding anything to the contrary in this Agreement, each Party may use for any purpose the Residuals resulting from access to the Confidential Information. \"Residuals\" means information retained in the unaided memory of persons who had access to the Confidential Information.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Return or Destruction. Within fifteen (15) days after a written request (sent to < notices@okafor-analytics.example>) by the disclosing Party, each Party shall return or destroy all Confidential Information in its possession. Copies may be retained to the extent required by law or bona fide document retention policies.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "No Obligation. Neither Party is under any obligation to proceed with the Transaction unless and until a definitive agreement has been executed.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Remedies. Money damages may not be a sufficient remedy for a breach of this Agreement, and the non-breaching party shall be entitled to seek specific performance and injunctive relief.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Governing Law. This Agreement shall be governed by and construed in accordance with the laws of the State of New York, without regard to its conflict of laws principles.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Miscellaneous. This Agreement constitutes the entire agreement between the parties regarding its subject matter and may be executed in counterparts, including by electronic signature.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "IN WITNESS WHEREOF, the parties have executed this Agreement as of the Effective Date.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 2,
+      "text": "Bellhaven Equity Partners Fund IV, L.P. By: ______________________________ Name: Eugene Ward Title: Managing Director",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 2,
+      "text": "Okafor Analytics LLC By: ______________________________ Name: David Evans Title: President",
+      "source": "text_layer",
+      "ocr_confidence": null
+    }
+  ],
+  "responses": {
+    "classify": {
+      "model": "claude-haiku-5-5",
+      "stop_reason": "end_turn",
+      "raw_output": "{\"doc_type\":\"nda\",\"subtype\":null,\"confidence\":0.95,\"page\":1,\"quote\":\"Mutual Confidentiality Agreement\"}",
+      "usage": {
+        "input_tokens": 1010,
+        "output_tokens": 54,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 1996
+      }
+    },
+    "extract": {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn",
+      "raw_output": "{\"counterparty\":{\"value\":\"Okafor Analytics LLC\",\"page\":1,\"quote\":\"This Mutual Confidentiality Agreement (this \\\"Agreement\\\") is entered into as of September 3, 2024 (the \\\"Effective Date\\\") by and between Bellhaven Equity Partners Fund IV, L.P. and Okafor Analytics LLC, a Indiana limited liability company (each, a \\\"Party\\\").\",\"confidence\":0.97},\"fund_party\":{\"value\":\"Bellhaven Equity Partners Fund IV, L.P.\",\"page\":1,\"quote\":\"This Mutual Confidentiality Agreement (this \\\"Agreement\\\") is entered into as of September 3, 2024 (the \\\"Effective Date\\\") by and between Bellhaven Equity Partners Fund IV, L.P. and Okafor Analytics LLC, a Indiana limited liability company (each, a \\\"Party\\\").\",\"confidence\":0.97},\"effective_date\":{\"value\":\"2024-09-03\",\"page\":1,\"quote\":\"This Mutual Confidentiality Agreement (this \\\"Agreement\\\") is entered into as of September 3, 2024 (the \\\"Effective Date\\\")\",\"confidence\":0.97},\"mutual\":{\"value\":true,\"page\":1,\"quote\":\"In connection with a possible negotiated transaction referred to as Project Copper (the \\\"Transaction\\\"), each Party may furnish the other Party with certain information concerning its business.\",\"confidence\":0.95},\"term_months\":{\"value\":24,\"page\":1,\"quote\":\"The obligations under this Agreement shall remain in effect for two (2) years from the Effective Date.\",\"confidence\":0.95},\"governing_law\":{\"value\":\"New York\",\"page\":1,\"quote\":\"This Agreement shall be governed by and construed in accordance with the laws of the State of New York, without regard to its conflict of laws principles.\",\"confidence\":0.98},\"non_solicit_months\":{\"value\":null,\"page\":null,\"quote\":null,\"confidence\":0.93},\"non_compete_months\":{\"value\":null,\"page\":null,\"quote\":null,\"confidence\":0.95},\"residuals_clause\":{\"value\":true,\"page\":1,\"quote\":\"Notwithstanding anything to the contrary in this Agreement, each Party may use for any purpose the Residuals resulting from access to the Confidential Information.\",\"confidence\":0.97},\"return_destroy_days\":{\"value\":15,\"page\":1,\"quote\":\"Within fifteen (15) days after a written request (sent to \u2039 notices@okafor-analytics.example\u203a) by the disclosing Party, each Party shall return or destroy all Confidential Information in its possession.\",\"confidence\":0.95}}",
+      "usage": {
+        "input_tokens": 5049,
+        "output_tokens": 873,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 1195
+      }
+    }
+  }
+}

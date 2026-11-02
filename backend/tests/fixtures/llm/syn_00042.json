@@ -1,0 +1,149 @@
+{
+  "doc_id": "syn_00042",
+  "scanned": false,
+  "truth": {
+    "doc_type": "nda",
+    "subtype": null,
+    "fields": {
+      "counterparty": "Ward Foods LLC",
+      "fund_party": "Bellhaven Equity Partners Fund VI, L.P.",
+      "effective_date": "2023-11-02",
+      "mutual": false,
+      "term_months": 12,
+      "governing_law": "New York",
+      "non_solicit_months": null,
+      "non_compete_months": null,
+      "residuals_clause": null,
+      "return_destroy_days": 45
+    }
+  },
+  "page_count": 2,
+  "blocks": [
+    {
+      "page": 1,
+      "text": "Evaluation Material Letter Agreement",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "This Evaluation Material Letter Agreement (this \"Agreement\") is entered into as of November 2, 2023 (the \"Effective Date\") by and between Bellhaven Equity Partners Fund VI, L.P. and Ward Foods LLC, a Arkansas limited liability company (the \"Company\") (\"Recipient\").",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "In connection with a possible negotiated transaction referred to as Project Granite (the \"Transaction\"), the Company intends to furnish Recipient with certain information concerning its business.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Confidential Information. \"Confidential Information\" means all non-public information, in any form, furnished by or on behalf of the Company in connection with the Transaction, together with all notes, analyses and other materials prepared by Recipient that contain or reflect such information. Confidential Information does not include information that is or becomes generally available to the public other than through a breach of this Agreement.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Use and Non-Disclosure. Recipient shall use the Confidential Information solely for the purpose of evaluating the Transaction and shall not disclose it to any person other than its affiliates, partners, employees, financing sources and advisors who need to know it for that purpose (its \"Representatives\").",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Term. The obligations under this Agreement shall remain in effect for one (1) year from the Effective Date.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Return or Destruction. Within forty-five (45) days after a written request by the Company, Recipient shall return or destroy all Confidential Information in its possession. Copies may be retained to the extent required by law or bona fide document retention policies.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "No Obligation. Neither Recipient nor the Company is under any obligation to proceed with the Transaction unless and until a definitive agreement has been executed.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Remedies. Money damages may not be a sufficient remedy for a breach of this Agreement, and the non-breaching party shall be entitled to seek specific performance and injunctive relief.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Governing Law. This Agreement shall be governed by and construed in accordance with the laws of the State of New York, without regard to its conflict of laws principles.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Miscellaneous. This Agreement constitutes the entire agreement between the parties regarding its subject matter and may be executed in counterparts, including by electronic signature.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "IN WITNESS WHEREOF, the parties have executed this Agreement as of the Effective Date.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Bellhaven Equity Partners Fund VI, L.P.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "By: ______________________________",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Name: Ryan Garcia",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Title: Managing Director",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 2,
+      "text": "Ward Foods LLC By: ______________________________ Name: Margaret Smith Title: General Counsel",
+      "source": "text_layer",
+      "ocr_confidence": null
+    }
+  ],
+  "responses": {
+    "classify": {
+      "model": "claude-haiku-5-5",
+      "stop_reason": "end_turn",
+      "raw_output": "{\"doc_type\":\"nda\",\"subtype\":null,\"confidence\":0.97,\"page\":1,\"quote\":\"Evaluation Material Letter Agreement\"}",
+      "usage": {
+        "input_tokens": 915,
+        "output_tokens": 54,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 1996
+      }
+    },
+    "extract": {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn",
+      "raw_output": "{\"counterparty\":{\"value\":\"Ward Foods LLC\",\"page\":1,\"quote\":\"by and between Bellhaven Equity Partners Fund VI, L.P. and Ward Foods LLC, a Arkansas limited liability company (the \\\"Company\\\") (\\\"Recipient\\\").\",\"confidence\":0.8},\"fund_party\":{\"value\":\"Bellhaven Equity Partners Fund VI, L.P.\",\"page\":1,\"quote\":\"by and between Bellhaven Equity Partners Fund VI, L.P. and Ward Foods LLC, a Arkansas limited liability company (the \\\"Company\\\") (\\\"Recipient\\\").\",\"confidence\":0.85},\"effective_date\":{\"value\":\"2023-11-02\",\"page\":1,\"quote\":\"This Evaluation Material Letter Agreement (this \\\"Agreement\\\") is entered into as of November 2, 2023 (the \\\"Effective Date\\\")\",\"confidence\":0.97},\"mutual\":{\"value\":false,\"page\":1,\"quote\":\"In connection with a possible negotiated transaction referred to as Project Granite (the \\\"Transaction\\\"), the Company intends to furnish Recipient with certain information concerning its business.\",\"confidence\":0.8},\"term_months\":{\"value\":12,\"page\":1,\"quote\":\"The obligations under this Agreement shall remain in effect for one (1) year from the Effective Date.\",\"confidence\":0.95},\"governing_law\":{\"value\":\"New York\",\"page\":1,\"quote\":\"This Agreement shall be governed by and construed in accordance with the laws of the State of New York, without regard to its conflict of laws principles.\",\"confidence\":0.97},\"non_solicit_months\":{\"value\":null,\"page\":null,\"quote\":null,\"confidence\":0.93},\"non_compete_months\":{\"value\":null,\"page\":null,\"quote\":null,\"confidence\":0.95},\"residuals_clause\":{\"value\":null,\"page\":null,\"quote\":null,\"confidence\":0.93},\"return_destroy_days\":{\"value\":45,\"page\":1,\"quote\":\"Within forty-five (45) days after a written request by the Company, Recipient shall return or destroy all Confidential Information in its possession.\",\"confidence\":0.96}}",
+      "usage": {
+        "input_tokens": 4954,
+        "output_tokens": 711,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 1195
+      }
+    }
+  }
+}

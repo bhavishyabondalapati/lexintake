@@ -122,7 +122,13 @@ def upload_and_parse(sample: list[dict], api: str, timeout: float = 600) -> dict
                 raise SystemExit(f"still not parsed after {timeout:.0f}s: {waiting}")
             print(f"  waiting for {len(waiting)} document(s) to be parsed...")
             time.sleep(5)
-    failed = [k for k, s in statuses.items() if s == "failed"]
+    # A document that failed while extracting (parsed fine, page_count is set) can be run again.
+    with httpx.Client(base_url=api, timeout=60) as client:
+        failed = [
+            k
+            for k, s in statuses.items()
+            if s == "failed" and client.get(f"/documents/{ids[k]}").json()["page_count"] is None
+        ]
     if failed:
         raise SystemExit(f"parsing failed for {failed}; fix that before extracting")
     return ids
@@ -160,7 +166,11 @@ def run_extraction(ids: dict[str, uuid.UUID], max_spend: Decimal) -> uuid.UUID:
 
     settings = get_settings()
     run = extract(
-        AnthropicExtractor(settings), settings, max_spend=max_spend, doc_ids=list(ids.values())
+        AnthropicExtractor(settings),
+        settings,
+        max_spend=max_spend,
+        doc_ids=list(ids.values()),
+        force=True,  # a clean run: the demo seed may have extracted some of these with the fake
     )
     _print_run(run)
     return run.run_id

@@ -80,7 +80,12 @@ class RetryableExtractionError(Exception):
 def failed_during_extraction(session, doc: Document) -> bool:
     last = session.scalars(
         select(AuditLog)
-        .where(AuditLog.document_id == doc.id, AuditLog.to_status == Status.FAILED)
+        # `failed -> failed` rows (a duplicate upload of the same file) don't say where it failed
+        .where(
+            AuditLog.document_id == doc.id,
+            AuditLog.to_status == Status.FAILED,
+            AuditLog.from_status != Status.FAILED,
+        )
         .order_by(AuditLog.id.desc())
         .limit(1)
     ).first()

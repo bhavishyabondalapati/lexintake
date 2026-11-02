@@ -1,0 +1,147 @@
+{
+  "doc_id": "syn_00082",
+  "scanned": false,
+  "truth": {
+    "doc_type": "side_letter",
+    "subtype": null,
+    "fields": {
+      "investor": "Lake Sharon Municipal Employees' Pension Fund",
+      "fund": "Tamarind Harbor Partners Fund VII, L.P.",
+      "effective_date": "2022-08-25",
+      "commitment_usd": 108500000,
+      "management_fee_pct": 1.25,
+      "mfn": null,
+      "co_investment": null,
+      "advisory_committee_seat": true
+    }
+  },
+  "page_count": 1,
+  "blocks": [
+    {
+      "page": 1,
+      "text": "Tamarind Harbor Partners GP VII, LLC",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "August 25, 2022 Lake Sharon Municipal Employees' Pension Fund 125 Stephanie Knoll Haysberg, TX 58953 Re: Side Letter Agreement",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Ladies and Gentlemen:",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "This letter agreement (this \"Side Letter\") is entered into as of August 25, 2022 in connection with the subscription by Lake Sharon Municipal Employees' Pension Fund (the \"Investor\") for a limited partner interest in Tamarind Harbor Partners Fund VII, L.P. (the \"Partnership\"). Capitalized terms not defined here have the meanings given in the Partnership's limited partnership agreement (the \"Partnership Agreement\").",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "The Investor has subscribed for a capital commitment of $108,500,000.00 to the Partnership (the \"Commitment\").",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Management Fee. Notwithstanding the Partnership Agreement, the annual management fee payable with respect to the Investor shall be 1.25% of its Commitment.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Advisory Committee. The Investor shall be entitled to appoint one representative to the Limited Partner Advisory Committee of the Partnership.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Confidentiality. The Investor shall keep the terms of this Side Letter confidential, except as required by applicable law. This Side Letter shall be governed by the laws of the State of Delaware.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Please confirm your agreement by countersigning below.",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Tamarind Harbor Partners GP VII, LLC",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "By: ______________________________",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Name: James Gill",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Title: Managing Member",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Lake Sharon Municipal Employees' Pension Fund",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "By: ______________________________",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Name: Kelly Smith",
+      "source": "text_layer",
+      "ocr_confidence": null
+    },
+    {
+      "page": 1,
+      "text": "Title: Authorized Signatory",
+      "source": "text_layer",
+      "ocr_confidence": null
+    }
+  ],
+  "responses": {
+    "classify": {
+      "model": "claude-haiku-5-5",
+      "stop_reason": "end_turn",
+      "raw_output": "{\"doc_type\":\"side_letter\",\"subtype\":null,\"confidence\":0.97,\"page\":1,\"quote\":\"Re: Side Letter Agreement\"}",
+      "usage": {
+        "input_tokens": 631,
+        "output_tokens": 54,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 1996
+      }
+    },
+    "extract": {
+      "model": "claude-haiku-5-5",
+      "stop_reason": "end_turn",
+      "raw_output": "{\"investor\":{\"value\":\"Lake Sharon Municipal Employees' Pension Fund\",\"page\":1,\"quote\":\"subscription by Lake Sharon Municipal Employees' Pension Fund (the \\\"Investor\\\") for a limited partner interest in Tamarind Harbor Partners Fund VII, L.P.\",\"confidence\":0.95},\"fund\":{\"value\":\"Tamarind Harbor Partners Fund VII, L.P.\",\"page\":1,\"quote\":\"for a limited partner interest in Tamarind Harbor Partners Fund VII, L.P. (the \\\"Partnership\\\").\",\"confidence\":0.95},\"effective_date\":{\"value\":\"2022-08-25\",\"page\":1,\"quote\":\"This letter agreement (this \\\"Side Letter\\\") is entered into as of August 25, 2022 in connection with the subscription\",\"confidence\":0.9},\"commitment_usd\":{\"value\":108500000,\"page\":1,\"quote\":\"The Investor has subscribed for a capital commitment of $108,500,000.00 to the Partnership (the \\\"Commitment\\\").\",\"confidence\":0.95},\"management_fee_pct\":{\"value\":1.25,\"page\":1,\"quote\":\"the annual management fee payable with respect to the Investor shall be 1.25% of its Commitment.\",\"confidence\":0.93},\"mfn\":{\"value\":null,\"page\":null,\"quote\":null,\"confidence\":0.9},\"co_investment\":{\"value\":null,\"page\":null,\"quote\":null,\"confidence\":0.9},\"advisory_committee_seat\":{\"value\":true,\"page\":1,\"quote\":\"The Investor shall be entitled to appoint one representative to the Limited Partner Advisory Committee of the Partnership.\",\"confidence\":0.92}}",
+      "usage": {
+        "input_tokens": 651,
+        "output_tokens": 566,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 5400
+      }
+    }
+  }
+}

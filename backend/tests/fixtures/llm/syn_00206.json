@@ -1,0 +1,179 @@
+{
+  "doc_id": "syn_00206",
+  "scanned": true,
+  "truth": {
+    "doc_type": "nda",
+    "subtype": null,
+    "fields": {
+      "counterparty": "Larson Software Corp.",
+      "fund_party": "Larchmont Vale Partners Fund II, L.P.",
+      "effective_date": "2022-07-12",
+      "mutual": false,
+      "term_months": 24,
+      "governing_law": "Delaware",
+      "non_solicit_months": 6,
+      "non_compete_months": null,
+      "residuals_clause": true,
+      "return_destroy_days": 45
+    }
+  },
+  "page_count": 2,
+  "blocks": [
+    {
+      "page": 1,
+      "text": "Non-Disclosure Agreement",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "This Non-Disclosure Agreement (this \"Agreement\") is entered into as of July 12, 2022 (the \"Effective Date\") by and between Larchmont Vale Partners Fund II, L.P. and Larson Software Corp., a Illinois corporation (the \"Company\") (\"Recipient\").",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "In connection with a possible negotiated transaction referred to as Project Falcon (the \"Transaction\"), the Company intends to furnish Recipient with certain information concerning its business.",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "Confidential Information. \"Confidential Information\"means all non-public information, in any form, furnished by or on behalf of the Company in connection with the Transaction, together with all notes, analyses and other materials prepared by Recipient that contain or reflect such information. Confidential Information does not include information that is or becomes generally available to the public other than through a breach of this Agreement.",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "Use and Non-Disclosure. Recipient shall use the Confidential Information solely for the purpose of evaluating the Transaction and shall not disclose it to any person other than its affiliates, partners, employees, financing sources and advisors who need to know it for that purpose (its \"Representatives\").",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "Term. The obligations under this Agreement shall remain in effect for twenty-four(24) months from the Effective Date.",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "Non-Solicitation. For a period of six (6) months from the Effective Date, Recipient shall not, directly or indirectly, solicit for employment any officer or management-level employee of the Company with whom it first had contact in connection with the Transaction. General advertisements not targeted at such persons shall not breach this Section.",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "Residuals. Notwithstanding anything to the contrary in this Agreement, Recipient may use for any purpose the Residuals resulting from access to the Confidential Information. \"Residuals\" means information retained in the unaided memory of persons who had access to the Confidential Information.",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "Return or Destruction. Within forty-five (45)days after a written request by the Company, Recipient shall return or destroy all Confidential Information in its possession. Copies may be retained to the extent required by law or bona fide document retention policies.",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "t           n n  thn he Transaction unless and until a definitive agreement has been executed.",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "Remedies. Money damages may not be a sufficient remedy for a breach of this Agreement, and the non-breaching party shall be entitled to seek specific performance and injunctive relief.",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 1,
+      "text": "Governing Law. This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws principles.",
+      "source": "ocr",
+      "ocr_confidence": 0.981
+    },
+    {
+      "page": 2,
+      "text": "Miscellaneous. This Agreement constitutes the entire agreement between the parties regarding its subject matter and may be executed in count\u00e9rparts, including by electronic signature.",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    },
+    {
+      "page": 2,
+      "text": "IN WITNESS WHEREOF, the parties have executed this Agreement as of the Effective Date.",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    },
+    {
+      "page": 2,
+      "text": "Larchmont Vale Partners Fund II, L.P.",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    },
+    {
+      "page": 2,
+      "text": "By:",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    },
+    {
+      "page": 2,
+      "text": "Name: Adrienne Day",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    },
+    {
+      "page": 2,
+      "text": "Title: Principal",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    },
+    {
+      "page": 2,
+      "text": "Larson Software Corp.",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    },
+    {
+      "page": 2,
+      "text": "By:",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    },
+    {
+      "page": 2,
+      "text": "Name: Christina Hall",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    },
+    {
+      "page": 2,
+      "text": "Title: General Counsel",
+      "source": "ocr",
+      "ocr_confidence": 0.9902
+    }
+  ],
+  "responses": {
+    "classify": {
+      "model": "claude-haiku-5-5",
+      "stop_reason": "end_turn",
+      "raw_output": "{\"doc_type\":\"nda\",\"subtype\":null,\"confidence\":0.95,\"page\":1,\"quote\":\"Non-Disclosure Agreement\"}",
+      "usage": {
+        "input_tokens": 1065,
+        "output_tokens": 52,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 1996
+      }
+    },
+    "extract": {
+      "model": "claude-sonnet-5-5",
+      "stop_reason": "end_turn",
+      "raw_output": "{\"counterparty\":{\"value\":\"Larson Software Corp.\",\"page\":1,\"quote\":\"Larson Software Corp., a Illinois corporation (the \\\"Company\\\") (\\\"Recipient\\\").\",\"confidence\":0.8},\"fund_party\":{\"value\":\"Larchmont Vale Partners Fund II, L.P.\",\"page\":1,\"quote\":\"This Non-Disclosure Agreement (this \\\"Agreement\\\") is entered into as of July 12, 2022 (the \\\"Effective Date\\\") by and between Larchmont Vale Partners Fund II, L.P. and Larson Software Corp., a Illinois corporation (the \\\"Company\\\") (\\\"Recipient\\\").\",\"confidence\":0.85},\"effective_date\":{\"value\":\"2022-07-12\",\"page\":1,\"quote\":\"This Non-Disclosure Agreement (this \\\"Agreement\\\") is entered into as of July 12, 2022 (the \\\"Effective Date\\\") by and between Larchmont Vale Partners Fund II, L.P. and Larson Software Corp., a Illinois corporation (the \\\"Company\\\") (\\\"Recipient\\\").\",\"confidence\":0.97},\"mutual\":{\"value\":false,\"page\":1,\"quote\":\"In connection with a possible negotiated transaction referred to as Project Falcon (the \\\"Transaction\\\"), the Company intends to furnish Recipient with certain information concerning its business.\",\"confidence\":0.7},\"term_months\":{\"value\":24,\"page\":1,\"quote\":\"The obligations under this Agreement shall remain in effect for twenty-four(24) months from the Effective Date.\",\"confidence\":0.95},\"governing_law\":{\"value\":\"Delaware\",\"page\":1,\"quote\":\"This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of laws principles.\",\"confidence\":0.97},\"non_solicit_months\":{\"value\":6,\"page\":1,\"quote\":\"For a period of six (6) months from the Effective Date, Recipient shall not, directly or indirectly, solicit for employment any officer or management-level employee of the Company with whom it first had contact in connection with the Transaction.\",\"confidence\":0.95},\"non_compete_months\":{\"value\":null,\"page\":null,\"quote\":null,\"confidence\":0.9},\"residuals_clause\":{\"value\":true,\"page\":1,\"quote\":\"Notwithstanding anything to the contrary in this Agreement, Recipient may use for any purpose the Residuals resulting from access to the Confidential Information.\",\"confidence\":0.97},\"return_destroy_days\":{\"value\":45,\"page\":1,\"quote\":\"Within forty-five (45)days after a written request by the Company, Recipient shall return or destroy all Confidential Information in its possession.\",\"confidence\":0.95}}",
+      "usage": {
+        "input_tokens": 5104,
+        "output_tokens": 905,
+        "cache_write_tokens": 0,
+        "cache_read_tokens": 1195
+      }
+    }
+  }
+}
