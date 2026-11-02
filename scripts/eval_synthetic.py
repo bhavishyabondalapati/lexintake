@@ -40,7 +40,9 @@ class FieldRow:
     confidence: float
     source: str | None
     ok: bool
-    cause: str | None = None  # for a wrong field: "ocr" (the text itself is wrong) or "model"
+    # for a wrong field: "ocr" (copied faithfully from damaged text), "model_missed" (null) or
+    # "model_wrong" (a value the text does not contain)
+    cause: str | None = None
 
 
 @dataclass
@@ -178,11 +180,15 @@ def load_rows(run_id: uuid.UUID) -> list[Row]:
                     ok = same(truth["fields"].get(name), f["value"])
                     cause = None
                     if not ok:
-                        # Did the document's own (OCR'd) text lose the evidence? Then the model
-                        # copied a faithful reading of damaged text.
-                        evidence = truth["evidence"].get(name)
-                        damaged = bool(evidence) and normalize(evidence) not in text
-                        cause = "ocr" if damaged and f["status"] == "verified" else "model"
+                        value = f["value"]
+                        if value is None:
+                            cause = "model_missed"  # the model found nothing
+                        elif isinstance(value, str) and normalize(value) in text:
+                            # Exactly what the document's (OCR'd) text says: the model copied
+                            # damaged text faithfully.
+                            cause = "ocr"
+                        else:
+                            cause = "model_wrong"
                     row.fields.append(
                         FieldRow(
                             name,
@@ -236,14 +242,12 @@ def accuracy_tables(rows: list[Row]) -> list[str]:
         "Quote verified (non-null fields)",
         lambda rs: frac(sum(f.status == "verified" for f in nonnull(rs)), len(nonnull(rs))),
     )
-    line(
-        "Wrong fields caused by damaged OCR text",
-        lambda rs: str(sum(f.cause == "ocr" for f in fields(rs))),
-    )
-    line(
-        "Wrong fields caused by the model",
-        lambda rs: str(sum(f.cause == "model" for f in fields(rs))),
-    )
+    for cause, label in (
+        ("ocr", "Wrong field: model copied damaged OCR text faithfully"),
+        ("model_missed", "Wrong field: model returned nothing (null)"),
+        ("model_wrong", "Wrong field: model returned a value the text does not contain"),
+    ):
+        line(label, lambda rs, c=cause: str(sum(f.cause == c for f in fields(rs))))
 
     def agree(rs):
         n = ndas(rs)
