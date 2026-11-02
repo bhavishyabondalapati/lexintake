@@ -62,14 +62,24 @@ def load_playbook(path: Path = DEFAULT_PLAYBOOK_PATH) -> Playbook:
 
 
 def evaluate(playbook: Playbook, fields: dict[str, Any]) -> list[str]:
-    """Return the ids of the rules the fields break, in playbook order.
+    """Return the ids of the rules plain trusted values break, in playbook order.
 
-    A field missing from the dict is treated like null (clause absent).
+    A thin wrapper over `check_playbook`, so the rules are interpreted in one place. The values
+    count as verified; a missing field or null means the clause is absent. A null where a value is
+    required (governing law) can't be confirmed, so it counts as a break here too.
     """
-    return [rule.id for rule in playbook.rules if not rule.passes(fields.get(rule.field))]
+    entries = {
+        rule.field: {"value": fields.get(rule.field), "status": "verified"}
+        if fields.get(rule.field) is not None
+        else _ABSENT
+        for rule in playbook.rules
+    }
+    results = check_playbook(playbook, entries)
+    return [r.rule_id for r in results if r.outcome != PASS]
 
 
 PASS, DEVIATION, UNKNOWN = "pass", "deviation", "unknown"
+_ABSENT = {"value": None, "status": "absent"}
 
 
 @dataclass(frozen=True)
