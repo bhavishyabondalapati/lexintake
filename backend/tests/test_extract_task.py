@@ -33,8 +33,8 @@ def test_task_extracts_a_parsed_document(worker_env):
     doc_id = add_parsed_doc(NDA)
     worker_env.setattr(task, "get_extractor", lambda: FakeExtractor(NDA))
 
-    assert task.extract_document.apply(args=[str(doc_id)]).get() == "extracted"
-    assert _status(doc_id) == Status.EXTRACTED
+    assert task.extract_document.apply(args=[str(doc_id)]).get() == "auto_approved"
+    assert _status(doc_id) == Status.AUTO_APPROVED
 
 
 def test_daily_spend_cap_counts_what_was_already_spent_today(worker_env):

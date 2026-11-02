@@ -35,9 +35,10 @@ from app.extraction.route import (
     classification_reasons,
     document_reasons,
     field_reasons,
+    playbook_reasons,
     scope_reasons,
 )
-from app.extraction.schemas import SCHEMA_VERSION, CitedFields, Classification
+from app.extraction.schemas import SCHEMA_VERSION, CitedFields, Classification, DocType
 from app.extraction.verify import (
     check_classification,
     check_fields,
@@ -45,13 +46,14 @@ from app.extraction.verify import (
     nda_signals,
 )
 from app.models import AuditLog, Document, Extraction, LlmCall, LlmOutcome, Status
+from app.playbook import check_playbook, load_playbook
 from app.status import transition
 
 log = logging.getLogger(__name__)
 
 MAX_OUTPUT_ATTEMPTS = 2  # invalid output: retry once, then needs_review
 MAX_ERROR_CHARS = 2000
-RERUNNABLE = {Status.EXTRACTED, Status.NEEDS_REVIEW}
+RERUNNABLE = {Status.EXTRACTED, Status.NEEDS_REVIEW, Status.AUTO_APPROVED}
 
 
 @dataclass
@@ -131,21 +133,31 @@ def _run_locked(document_id: uuid.UUID, ctx: RunContext, force: bool) -> Outcome
         return Outcome("failed", step.cost)
 
     # Step 3: save the result and route, all or nothing.
-    final = Status.NEEDS_REVIEW if reasons else Status.EXTRACTED
+    # NDAs also go through the playbook (their fields exist only if the type was not in doubt).
+    is_nda = extraction.doc_type == DocType.NDA.value and bool(extraction.fields)
+    if is_nda:
+        results = check_playbook(load_playbook(), extraction.fields)
+        extraction.playbook_results = [r.to_json() for r in results]
+        pb_reasons = playbook_reasons(results)
+        reasons = reasons + pb_reasons
+    else:
+        pb_reasons = []
     extraction.review_reasons = [r.to_json() for r in reasons]
-    _finish(
-        document_id,
-        final,
-        ctx,
-        {
-            "run_id": str(ctx.run_id) if ctx.run_id else None,
-            "doc_type": extraction.doc_type,
-            "reasons": sorted({r.code for r in reasons}),
-            "cost_usd": str(step.cost),
-        },
-        extraction,
-    )
-    return Outcome(final.value, step.cost, reasons)
+    detail = {
+        "run_id": str(ctx.run_id) if ctx.run_id else None,
+        "doc_type": extraction.doc_type,
+        "reasons": sorted({r.code for r in reasons}),
+        "cost_usd": str(step.cost),
+    }
+    if reasons and len(reasons) > len(pb_reasons):
+        final, then = Status.NEEDS_REVIEW, None  # an extraction check failed already
+    elif is_nda:
+        # extracted, then the playbook decides
+        final, then = Status.EXTRACTED, Status.NEEDS_REVIEW if reasons else Status.AUTO_APPROVED
+    else:
+        final, then = Status.EXTRACTED, None
+    _finish(document_id, final, ctx, detail, extraction, then)
+    return Outcome((then or final).value, step.cost, reasons)
 
 
 class _Step:
@@ -267,7 +279,10 @@ def _finish(
     ctx: RunContext,
     detail: dict,
     extraction: Extraction | None = None,
+    then: Status | None = None,
 ) -> None:
+    """Set the status (and save the extraction) in one transaction. `then` is a second hop, e.g.
+    extracted -> auto_approved; both hops get an audit row."""
     with session_scope() as session:
         doc = session.get_one(Document, document_id, with_for_update=True)
         if extraction is not None:
@@ -277,6 +292,8 @@ def _finish(
             if doc.error and not doc.error.startswith("partial"):
                 doc.error = None  # an earlier failed attempt; this one got through
         transition(session, doc, to, ctx.actor, detail)
+        if then is not None:
+            transition(session, doc, then, "playbook", detail)
 
 
 def mark_failed(document_id: uuid.UUID, error: str, actor: str) -> None:

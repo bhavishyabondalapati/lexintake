@@ -11,7 +11,8 @@ from app.extraction.base import LlmCallFailed
 from app.extraction.pricing import SpendGuard
 from app.extraction.run import RetryableExtractionError, RunContext, run_extraction
 from app.models import AuditLog, Document, Extraction, LlmCall, Status
-from tests.docs import LEGAL_NOTICE, NDA, SIDE_LETTER, add_parsed_doc
+from app.playbook import evaluate, load_playbook
+from tests.docs import ANGLE_NDA, LEGAL_NOTICE, NDA, SIDE_LETTER, add_parsed_doc
 from tests.fakes import FakeExtractor
 
 pytestmark = pytest.mark.db
@@ -55,9 +56,13 @@ def test_nda_is_classified_then_extracted_with_the_strong_model(db):
     outcome = _run(doc_id, fake)
 
     doc, extraction, calls, audit = _state(doc_id)
-    assert outcome.result == "extracted", extraction.review_reasons
-    assert doc.status == Status.EXTRACTED and doc.doc_type == "nda"
-    assert audit[-2:] == [("parsed", "extracting"), ("extracting", "extracted")]
+    assert outcome.result == "auto_approved", extraction.review_reasons
+    assert doc.status == Status.AUTO_APPROVED and doc.doc_type == "nda"
+    assert audit[-3:] == [
+        ("parsed", "extracting"),
+        ("extracting", "extracted"),
+        ("extracted", "auto_approved"),
+    ]
     assert [(c.step, c.model) for c in calls] == [("classify", CHEAP), ("extract", STRONG)]
     assert all(c.cost_usd > 0 for c in calls)
     assert outcome.cost_usd == sum(c.cost_usd for c in calls)
@@ -98,7 +103,7 @@ def test_invalid_output_is_retried_once(db):
     outcome = _run(doc_id, FakeExtractor(NDA, invalid_times=1))
 
     _, _, calls, _ = _state(doc_id)
-    assert outcome.result == "extracted"
+    assert outcome.result == "auto_approved"
     assert [(c.step, c.attempt, c.outcome) for c in calls] == [
         ("classify", 1, "invalid_output"),
         ("classify", 2, "ok"),
@@ -136,7 +141,7 @@ def test_retryable_api_error_is_recorded_and_raised_for_the_caller_to_retry(db):
     doc, _, calls, _ = _state(doc_id)
     assert doc.status == Status.EXTRACTING  # the worker retries; a redelivery is allowed
     assert [(c.outcome, c.cost_usd) for c in calls] == [("api_error", Decimal(0))]
-    assert _run(doc_id, FakeExtractor(NDA)).result == "extracted"  # the retry works
+    assert _run(doc_id, FakeExtractor(NDA)).result == "auto_approved"  # the retry works
 
 
 def test_non_retryable_api_error_fails_the_document(db):
@@ -148,7 +153,7 @@ def test_non_retryable_api_error_fails_the_document(db):
     assert doc.status == Status.FAILED and "400" in doc.error
     assert audit[-1] == ("extracting", "failed")
     # A failure during extraction can be re-run as an extraction (not a re-parse).
-    assert _run(doc_id, FakeExtractor(NDA)).result == "extracted"
+    assert _run(doc_id, FakeExtractor(NDA)).result == "auto_approved"
     assert _state(doc_id)[0].error is None
 
 
@@ -245,7 +250,7 @@ def test_done_documents_are_skipped_unless_forced(db):
     _run(doc_id, FakeExtractor(NDA))
 
     assert _run(doc_id, FakeExtractor(NDA)).result == "already_done"
-    assert _run(doc_id, FakeExtractor(NDA), force=True).result == "extracted"
+    assert _run(doc_id, FakeExtractor(NDA), force=True).result == "auto_approved"
 
     with session_scope() as session:
         assert len(session.scalars(select(Extraction)).all()) == 1  # replaced, not appended
@@ -310,3 +315,51 @@ def test_a_document_that_is_not_parsed_yet_is_left_alone(db):
     doc_id = add_parsed_doc(NDA, status=Status.PARSING)
 
     assert _run(doc_id, FakeExtractor(NDA)).result == "not_parsed"
+
+
+def test_nda_that_breaks_a_playbook_rule_goes_to_review_with_the_rule_id(db):
+    entry = ANGLE_NDA  # its quotes all verify
+    expected = evaluate(load_playbook(), entry["fields"])
+    assert expected == ["no_residuals"]
+    doc_id = add_parsed_doc(entry)
+
+    outcome = _run(doc_id, FakeExtractor(entry))
+
+    doc, extraction, _, audit = _state(doc_id)
+    assert outcome.result == "needs_review" and doc.status == Status.NEEDS_REVIEW
+    assert audit[-2:] == [("extracting", "extracted"), ("extracted", "needs_review")]
+    deviating = {r["rule_id"] for r in extraction.playbook_results if r["outcome"] == "deviation"}
+    assert deviating == set(expected)
+    assert {(r["code"], r["field"]) for r in extraction.review_reasons} >= {
+        ("playbook_deviation", rule) for rule in expected
+    }
+
+
+def test_unknown_playbook_result_never_auto_approves(db):
+    # A bad quote makes governing_law unverified: an extraction check fails and the rule is unknown.
+    doc_id = add_parsed_doc(NDA)
+    fake = FakeExtractor(NDA, fields={"governing_law": {"quote": "laws of Atlantis"}})
+
+    _run(doc_id, fake)
+
+    doc, extraction, _, _ = _state(doc_id)
+    outcomes = {r["rule_id"]: r["outcome"] for r in extraction.playbook_results}
+    assert doc.status == Status.NEEDS_REVIEW
+    assert outcomes["governing_law_allowed"] == "unknown"
+    assert ("playbook_unknown", "governing_law_allowed") in {
+        (r["code"], r["field"]) for r in extraction.review_reasons
+    }
+
+
+def test_auto_approved_nda_stores_all_passing_results_and_non_ndas_skip_the_playbook(db):
+    nda_id, letter_id = add_parsed_doc(NDA), add_parsed_doc(SIDE_LETTER)
+
+    _run(nda_id, FakeExtractor(NDA))
+    _run(letter_id, FakeExtractor(SIDE_LETTER))
+
+    _, nda_extraction, _, _ = _state(nda_id)
+    assert {r["outcome"] for r in nda_extraction.playbook_results} == {"pass"}
+    assert nda_extraction.review_reasons == []
+    letter, letter_extraction, _, _ = _state(letter_id)
+    assert letter_extraction.playbook_results is None
+    assert letter.status in (Status.EXTRACTED, Status.NEEDS_REVIEW)  # Phase 3 routing, unchanged

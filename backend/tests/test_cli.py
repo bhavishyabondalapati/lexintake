@@ -74,7 +74,7 @@ def test_extract_respects_limit_and_records_cost_per_model(db):
     run = cli.extract(FakeExtractor(NDA), _settings(), limit=2, max_spend="1.00")
 
     assert list(run.results) == ids[:2]
-    assert set(run.results.values()) == {"extracted"}
+    assert set(run.results.values()) == {"auto_approved"}
     table = {(r["step"], r["model"]): r for r in cli.cost_table(run.run_id)}
     assert table[("classify", "claude-haiku-5-5")]["documents"] == 2
     assert table[("extract", "claude-sonnet-5-5")]["calls"] == 2
@@ -92,11 +92,11 @@ def test_extract_stops_at_the_spend_limit_and_leaves_the_rest_parsed(db):
     run = cli.extract(fake, _settings(), max_spend="0.15")
 
     assert run.stopped_by_spend_limit
-    assert list(run.results.values()) == ["extracted", "spend_limit"]
+    assert list(run.results.values()) == ["auto_approved", "spend_limit"]
     assert run.spent <= Decimal("0.15")
     with session_scope() as session:
         statuses = [session.get_one(Document, i).status for i in ids]
-    assert statuses == [Status.EXTRACTED, Status.PARSED, Status.PARSED]
+    assert statuses == [Status.AUTO_APPROVED, Status.PARSED, Status.PARSED]
 
 
 def test_extract_marks_a_document_failed_when_the_api_keeps_failing(db):

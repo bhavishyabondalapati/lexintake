@@ -65,7 +65,9 @@ def select_documents(
         if doc_ids:
             query = query.where(Document.id.in_(doc_ids))
         else:
-            statuses = [Status.PARSED] + ([Status.EXTRACTED, Status.NEEDS_REVIEW] if force else [])
+            statuses = [Status.PARSED] + (
+                [Status.EXTRACTED, Status.NEEDS_REVIEW, Status.AUTO_APPROVED] if force else []
+            )
             query = query.where(Document.status.in_(statuses))
         if limit:
             query = query.limit(limit)

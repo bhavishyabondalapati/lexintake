@@ -133,4 +133,6 @@ def test_quotes_with_angle_brackets_verify_after_unescaping(db):
     field = extraction.fields["return_destroy_days"]
     assert "‹notices@" in field["quote"]  # quoted as the model saw it
     assert field["status"] == "verified" and field["match_score"] == 100
-    assert outcome.result == "extracted", extraction.review_reasons
+    # Every quote verified; the only reason left is the NDA's own residuals clause.
+    assert {r["code"] for r in extraction.review_reasons} == {"playbook_deviation"}
+    assert outcome.result == "needs_review"

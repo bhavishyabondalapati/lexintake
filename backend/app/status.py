@@ -10,7 +10,8 @@ from app.models import AuditLog, Document, Status
 # Which status can follow which. `parsing -> parsing` and `extracting -> extracting` are
 # redeliveries after a worker crash. `failed -> parsing | extracting` is a manual requeue of the
 # step that failed. `extracting -> parsed` hands a document back untouched when the spend cap
-# stops a run. `extracted | needs_review -> extracting` is a deliberate re-run (`--force`).
+# stops a run. `extracted | needs_review | auto_approved -> extracting` is a deliberate re-run
+# (`--force`). `extracted -> auto_approved | needs_review` is the playbook decision for an NDA.
 ALLOWED: dict[Status, set[Status]] = {
     Status.RECEIVED: {Status.PARSING, Status.FAILED},
     Status.PARSING: {Status.PARSING, Status.PARSED, Status.FAILED},
@@ -22,8 +23,9 @@ ALLOWED: dict[Status, set[Status]] = {
         Status.FAILED,
         Status.PARSED,
     },
-    Status.EXTRACTED: {Status.EXTRACTING},
+    Status.EXTRACTED: {Status.EXTRACTING, Status.AUTO_APPROVED, Status.NEEDS_REVIEW},
     Status.NEEDS_REVIEW: {Status.EXTRACTING},
+    Status.AUTO_APPROVED: {Status.EXTRACTING},
     Status.FAILED: {Status.PARSING, Status.EXTRACTING},
 }
 

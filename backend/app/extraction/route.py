@@ -12,6 +12,7 @@ from app.extraction.doctext import DocText
 from app.extraction.schemas import Classification, DocType
 from app.extraction.verify import NDA_SIGNALS_MIN, OCR_TRUST_MIN, FieldCheck
 from app.models import BlockSource
+from app.playbook import DEVIATION, UNKNOWN, RuleResult
 
 
 @dataclass(frozen=True)
@@ -90,3 +91,10 @@ def field_reasons(settings: Settings, checks: list[FieldCheck]) -> list[Reason]:
                 Reason("absent_but_mentioned", c.name, f"model says absent; text has {c.keyword!r}")
             )
     return reasons
+
+
+def playbook_reasons(results: list[RuleResult]) -> list[Reason]:
+    """One reason per rule that did not pass. `field` carries the rule id. An unknown is a reason
+    on purpose: a rule nobody could check must not look like a rule that was met."""
+    codes = {DEVIATION: "playbook_deviation", UNKNOWN: "playbook_unknown"}
+    return [Reason(codes[r.outcome], r.rule_id, r.reason) for r in results if r.outcome in codes]

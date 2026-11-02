@@ -30,8 +30,9 @@ class Status(StrEnum):
     PARSING = "parsing"
     PARSED = "parsed"
     EXTRACTING = "extracting"
-    EXTRACTED = "extracted"  # every check passed (Phase 4 adds the playbook check after this)
+    EXTRACTED = "extracted"  # every extraction check passed (NDAs: playbook check comes next)
     NEEDS_REVIEW = "needs_review"  # a check failed; the reasons are in extractions.review_reasons
+    AUTO_APPROVED = "auto_approved"  # an NDA that passed every check and every playbook rule
     FAILED = "failed"
 
 
@@ -167,6 +168,8 @@ class Extraction(Base):
     fields: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     # [{code, field, detail}]: why the document went to needs_review (empty when extracted)
     review_reasons: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    # [{rule_id, field, outcome pass|deviation|unknown, value, page, quote, reason}]; NDAs only
+    playbook_results: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, default=None)
     prompt_version: Mapped[str] = mapped_column(String(20))
     schema_version: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
