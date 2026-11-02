@@ -95,8 +95,8 @@ Needs [uv](https://docs.astral.sh/uv/), Node 22 and Docker Desktop.
 git clone https://github.com/bhavishyabondalapati/lexintake.git && cd lexintake
 cp .env.example .env   # add ANTHROPIC_API_KEY, ANTHROPIC_MODEL_CLASSIFY, ANTHROPIC_MODEL_EXTRACT
 make install           # Python 3.12 environment (uv) and frontend packages
-make dev               # the whole stack in Docker Compose
-make seed-demo         # demo documents through the real parser, fake extractor: no API calls
+make dev               # the whole stack in Docker Compose (leave it running)
+make seed-demo         # in a second terminal: demo documents, fake extractor, no API calls
 ```
 
 Then open the review page at http://localhost:3000 (if a port is taken, see `.env` and the
