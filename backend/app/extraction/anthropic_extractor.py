@@ -11,6 +11,8 @@
   cost numbers. A refusal goes to needs_review instead.
 """
 
+import json
+import re
 import time
 
 import anthropic
@@ -24,6 +26,8 @@ from app.models import LlmOutcome
 MAX_ERROR_CHARS = 2000
 # Status codes worth retrying later (the SDK has already retried them a few times).
 RETRYABLE_STATUS = {408, 409, 429}
+GRAMMAR_TOO_LARGE = "compiled grammar is too large"
+FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$")
 
 
 class AnthropicExtractor:
@@ -33,22 +37,45 @@ class AnthropicExtractor:
             max_retries=settings.anthropic_max_retries,
             timeout=120.0,
         )
+        # (model, schema size) pairs whose schema the API refused to compile into a grammar.
+        self._ungrammared: set[tuple[str, int]] = set()
 
-    def call(self, plan: CallPlan, doc: DocText) -> LlmResult:
-        output_config: dict = {"format": {"type": "json_schema", "schema": plan.schema}}
+    def _create(self, plan: CallPlan, strict: bool):
+        output_config: dict = {}
+        user = plan.user
+        if strict:
+            output_config["format"] = {"type": "json_schema", "schema": plan.schema}
+        else:
+            # Same schema, but asked for in words and checked by Pydantic afterwards.
+            user += (
+                "\n\nReturn only a JSON object (no prose, no code fence) that matches this JSON "
+                f"Schema:\n{json.dumps(plan.schema)}"
+            )
         if plan.effort:
             output_config["effort"] = plan.effort
+        return self.client.messages.create(
+            model=plan.model,
+            max_tokens=plan.max_tokens,
+            system=[{"type": "text", "text": plan.system, "cache_control": {"type": "ephemeral"}}],
+            messages=[{"role": "user", "content": user}],
+            output_config=output_config,
+        )
+
+    def call(self, plan: CallPlan, doc: DocText) -> LlmResult:
         started = time.monotonic()
+        key = (plan.model, len(json.dumps(plan.schema)))
+        strict = key not in self._ungrammared
         try:
-            response = self.client.messages.create(
-                model=plan.model,
-                max_tokens=plan.max_tokens,
-                system=[
-                    {"type": "text", "text": plan.system, "cache_control": {"type": "ephemeral"}}
-                ],
-                messages=[{"role": "user", "content": plan.user}],
-                output_config=output_config,
-            )
+            try:
+                response = self._create(plan, strict)
+            except anthropic.BadRequestError as e:
+                # The NDA schema (10 cited fields) is too big for the API's grammar compiler.
+                # Rejected requests aren't billed, so retry once without the grammar.
+                if not (strict and GRAMMAR_TOO_LARGE in str(e)):
+                    raise
+                self._ungrammared.add(key)
+                strict = False
+                response = self._create(plan, strict)
         except anthropic.APIStatusError as e:
             retryable = e.status_code in RETRYABLE_STATUS or e.status_code >= 500
             raise LlmCallFailed(
@@ -73,7 +100,7 @@ class AnthropicExtractor:
             stop_reason=response.stop_reason,
             request_id=getattr(response, "_request_id", None),
             latency_ms=latency_ms,
-            raw_text="".join(b.text for b in response.content if b.type == "text"),
+            raw_text=FENCE.sub("", "".join(b.text for b in response.content if b.type == "text")),
         )
         return validate(result, plan, doc)
 

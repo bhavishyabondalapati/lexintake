@@ -172,3 +172,31 @@ def test_spend_guard_plans_for_the_worst_case():
     guard.add(Decimal("0.02"))
     with pytest.raises(SpendLimitReached):
         guard.check(worst)
+
+
+def test_schema_too_large_for_the_grammar_falls_back_to_a_plain_json_request():
+    class Stub:
+        def __init__(self):
+            self.requests = []
+
+        def create(self, **kwargs):
+            self.requests.append(kwargs)
+            if "format" in kwargs["output_config"]:
+                request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+                raise anthropic.BadRequestError(
+                    "The compiled grammar is too large",
+                    response=httpx2.Response(400, request=request),
+                    body=None,
+                )
+            return _response("```json\n" + json.dumps(GOOD) + "\n```")
+
+    stub = Stub()
+    extractor = AnthropicExtractor(SETTINGS, client=SimpleNamespace(messages=stub))
+    plan = plan_classify(SETTINGS, DOC)
+
+    first = extractor.call(plan, DOC)
+    second = extractor.call(plan, DOC)
+
+    assert first.outcome == second.outcome == LlmOutcome.OK  # a code fence is tolerated
+    assert [("format" in r["output_config"]) for r in stub.requests] == [True, False, False]
+    assert "JSON Schema" in stub.requests[1]["messages"][0]["content"]
