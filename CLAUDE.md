@@ -64,4 +64,5 @@ This is an independent portfolio project. It is NOT affiliated with any firm and
 * `make parse-quality` — parse the synthetic set; evidence hit rates + deskew experiment
 * `make ingest-smoke` — send 20 ContractNLI PDFs through the running stack, report crashes
 * `make requeue` — re-queue documents stuck in `received` (`STATUS=received,failed`)
+* `make playbook-truth` — playbook checker vs the full synthetic manifest (free)
 * `make eval` — run the evaluation harness

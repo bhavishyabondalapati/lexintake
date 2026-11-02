@@ -52,8 +52,8 @@ flowchart LR
 Phase 0 builds the boxes that hold everything up: FastAPI, the Celery worker, Redis, Postgres
 with pgvector, and the Next.js app, all running together in Docker Compose. Phase 2 adds intake
 and parsing (below). Phase 3 adds classification, extraction and the citation checks
-([Classification & extraction](#classification--extraction-phase-3)). The playbook check and
-review come in Phases 4–6.
+([Classification & extraction](#classification--extraction-phase-3)). Phase 4 checks NDAs against
+the playbook ([Playbook check](#playbook-check-phase-4)). Filing and the review UI come in Phases 5–6.
 
 ### Ingestion and parsing (Phase 2)
 
@@ -137,6 +137,7 @@ lexintake/
 ├── .gitignore                    # Keeps .env, data/, .venv/, node_modules/ etc. out of git
 ├── .github/workflows/ci.yml      # CI on every push: backend (+Postgres), frontend, compose end-to-end
 ├── .github/workflows/slow-tests.yml # Real-Docling tests: parsing-related changes, nightly, on demand
+├── docs/phase4-dry-run.md        # Playbook dry run with the FAKE extractor (plumbing, not accuracy)
 ├── docs/phase3-dry-run.md        # Pipeline dry run with the FAKE extractor (checks + routing, not accuracy)
 ├── inbox/                        # Gitignored. Drop PDFs here; the watcher ingests them
 ├── db/init/01_extensions.sql     # Enables pgvector the first time Postgres starts
@@ -145,7 +146,9 @@ lexintake/
 ├── scripts/
 │   ├── __init__.py               # Makes scripts/ importable (tests, python -m)
 │   ├── download_data.py          # Downloads ContractNLI (+ CUAD), checks SHA-256, safe to re-run
-│   ├── compose_smoke.py          # Upload → wait for parsed → re-upload as duplicate (stdlib only)
+│   ├── compose_smoke.py          # Upload → wait for parsed → re-upload as duplicate → run the playbook checker in the containers
+│   ├── playbook_ground_truth.py  # Checker output vs the manifest's deviations (make playbook-truth)
+│   ├── playbook_dry_run_report.py # Summarises the fake-extractor dry run into docs/phase4-dry-run.md
 │   ├── parse_quality.py          # Evidence hit rates on the synthetic set + deskew experiment
 │   ├── ingest_smoke.py           # Sends ContractNLI's raw PDFs through the running stack
 │   ├── generate_synthetic.py     # CLI: plans the document mix, renders PDFs, writes the manifest
@@ -173,7 +176,8 @@ lexintake/
 │   │   ├── env.py                # Runs migrations against DATABASE_URL (or a test connection)
 │   │   ├── script.py.mako        # Template for new migration files
 │   │   ├── versions/0001_ingestion_tables.py # documents, text_blocks, audit_log
-│   │   └── versions/0002_extraction.py # new statuses, doc_type columns, extractions, llm_calls
+│   │   ├── versions/0002_extraction.py # new statuses, doc_type columns, extractions, llm_calls
+│   │   └── versions/0003_playbook.py # auto_approved status, extractions.playbook_results
 │   ├── app/
 │   │   ├── __init__.py           # Marks app/ as a package
 │   │   ├── config.py             # Settings read from env vars (DB, Redis, blobs, inbox, limits, ...)
@@ -185,7 +189,7 @@ lexintake/
 │   │   ├── queue.py              # Sends the parse / extract tasks to Celery by name
 │   │   ├── watcher.py            # Inbox watcher with the file-stability check
 │   │   ├── cli.py                # app.cli requeue (failed step again) and extract (--limit, --max-spend)
-│   │   ├── playbook.py           # Loads the playbook YAML and evaluates NDA fields against it
+│   │   ├── playbook.py           # Loads the playbook YAML; check_playbook gives pass / deviation / unknown with evidence
 │   │   ├── worker.py             # Celery app, queue routing, `ping` task
 │   │   ├── routes/documents.py   # POST /documents (upload), GET /documents/{id} (+ type, review reasons)
 │   │   ├── storage/blobs.py      # BlobStore interface + LocalBlobStore (content-addressed)
@@ -599,7 +603,7 @@ target (e.g. try RapidOCR's medium model or Tesseract).
 ### What happens to a parsed document
 
 ```
-parsed ──► extracting ──┬─► extracted      every check passed (Phase 4's playbook check comes next)
+parsed ──► extracting ──┬─► extracted      every check passed (NDAs: the playbook decides next, below)
                         ├─► needs_review   at least one check failed; the reasons are saved
                         └─► failed         the API kept failing, or a setting is missing
 ```
@@ -669,6 +673,49 @@ The report (`data/reports/extract_preview.md`) shows classification accuracy, ND
 per-field exact match, span verification, review reasons, absent-clause flags, cache use and cost
 per document per model, all split digital vs scanned. The dry run estimates the worst case at
 $0.80 for the 20 documents; real calls use far fewer output tokens than the maximum.
+
+## Playbook check (Phase 4)
+
+After extraction, every NDA is compared with the legal team's standard positions in
+[`playbook/nda_playbook.yaml`](playbook/nda_playbook.yaml). Lawyers can edit that file without
+touching code. The rules:
+
+| Rule id | Field | Passes when |
+|---|---|---|
+| `max_term` | `term_months` | 24 months or less |
+| `governing_law_allowed` | `governing_law` | Delaware or New York |
+| `non_solicit_max` | `non_solicit_months` | no non-solicit, or 12 months or less |
+| `no_non_compete` | `non_compete_months` | there is no non-compete |
+| `no_residuals` | `residuals_clause` | there is no residuals clause |
+| `return_destroy_required` | `return_destroy_days` | the NDA has a return/destroy obligation |
+
+Each rule returns one of three answers, with the evidence (page + quote) behind it:
+
+- **pass**: the value was verified and meets the rule.
+- **deviation**: the value was verified and breaks the rule.
+- **unknown**: we can't tell. The field was missing, the quote wasn't found in the text, the value
+  isn't in its quote, or the model said "absent" while the text mentions the clause.
+
+**Why unknown never auto-approves.** A rule we couldn't check is not a rule that was met. If
+"unknown" counted as a pass, a bad scan or a made-up quote could slip a 10-year term past the
+legal team. So the only way to be auto-approved is for every rule to be a verified pass.
+
+```
+extracting ──► extracted ──┬─► auto_approved   NDA: every extraction check AND every rule passed
+                           └─► needs_review    NDA: a deviation or unknown (rule ids + reasons saved)
+```
+
+Non-NDAs keep their Phase 3 routing (`extracted` or `needs_review`); the playbook doesn't apply.
+Both hops are in the audit log, and `extractions.playbook_results` keeps the full per-rule answer.
+The checker is `check_playbook` in `backend/app/playbook.py`, the same module the data generator
+uses, so labels and checks can't drift apart. The playbook is mounted into the containers at
+`/playbook` (read-only), and the compose smoke test runs the checker inside the worker and api
+containers.
+
+**Checked against ground truth.** Feeding every synthetic NDA's manifest fields to the checker
+gives exactly the manifest's deviations (n=40 in CI; `make playbook-truth` runs the full 500: 201
+NDAs, 0 mismatches). The fake-extractor dry run is in
+[`docs/phase4-dry-run.md`](docs/phase4-dry-run.md): plumbing only, not model accuracy.
 
 ## Evaluation results
 
@@ -757,7 +804,7 @@ Coming in Phase 7.
   construction. The recorded evidence also lets Phase 7 check *where* the model found an answer,
   not just whether the value is right.
 - **Single source of truth.** The playbook YAML defines "standard terms" once. The generator uses
-  it to label the data, and Phase 4's checker will use it to flag real documents, so the labels and
+  it to label the data, and Phase 4's checker uses it to flag real documents, so the labels and
   the checker can't drift apart.
 - **Database migrations (Alembic).** The schema lives in versioned scripts, not in "whatever
   the tables look like on my laptop". `alembic upgrade head` brings any database up to date, and a
@@ -837,11 +884,6 @@ Coming in Phase 7.
   offsets. So Phase 7 will need to either render the JSON text to PDF, reusing
   `scripts/synth/render.py` so the offsets still line up, or let the pipeline accept text input
   directly. This isn't built yet.
-- **Playbook path inside Docker (Phase 4 must fix).** `backend/app/playbook.py` looks for
-  `playbook/` at the repo root, which isn't in the backend images (their build context is
-  `./backend`). Phase 4 must either mount it read-only into the worker (`./playbook:/playbook:ro`
-  plus a setting for the path), which is simplest, or move the build context to the repo root and
-  `COPY` it.
 - **A writer that pauses mid-file can fool the watcher.** A file is picked up after it hasn't
   changed for ~2 seconds. If something writes half a file, pauses longer than that, then finishes,
   the watcher takes the half file (which then fails parsing with a clear error). Real copies,
