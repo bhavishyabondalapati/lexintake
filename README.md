@@ -1,17 +1,106 @@
 # LexIntake
 
-Automated intake and triage for legal documents at a private equity firm. LexIntake reads incoming
-NDAs, side letters, investor notices and legal notices. It works out what each one is, pulls out
-the key terms with page-level evidence, and checks them against the legal team's playbook, so
-lawyers only review the documents that get flagged.
+LexIntake is an automated intake and triage pipeline for the legal documents a mid-market private
+equity firm receives (NDAs, side letters, investor notices, legal notices). It parses PDFs with
+OCR fallback, classifies each document, extracts key terms with **verified citations** (every value
+must be backed by a quote that is found in the parsed text, with its page and bounding box), checks
+NDAs against the legal team's playbook (pass, deviation or unknown, with evidence), and routes
+anything doubtful to a human review page. When it is unsure it sends the document to a person; it
+never guesses. Built with FastAPI, Postgres, Celery, Docling, the Anthropic API and Next.js.
 
 > Independent portfolio project, not affiliated with any firm. It uses only public and synthetic
 > data.
 
-**Status:** Phases 0–2 (scaffold, data, ingestion & parsing) are done. Phase 3 (classification &
-extraction) is built and tested with a fake extractor; its first real-model run is pending. The
-pipeline is built phase by phase.
-See [PROMPTS.md](PROMPTS.md).
+## Results
+
+Two separate evaluations on different data. **Do not compare them.** Details, caveats and the
+method: [`docs/eval-results.md`](docs/eval-results.md).
+
+Single runs through the Anthropic Batch API (half price): `python -m app.cli extract --batch DIR`.
+Real models (Haiku for classification and small field sets, Sonnet for NDA fields). The models
+take no `temperature`, so a rerun varies a little. **Two different datasets, not comparable:**
+
+### Synthetic data (500 generated documents, 495 unique; ground truth is the manifest).** Numbers are
+from the **test half** (248 documents). The confidence thresholds were chosen on a separate
+calibration half, by fixed seed.
+
+| | Digital | Scanned | All |
+|---|---|---|---|
+| Document type correct | 207/207 | 41/41 | 248/248 |
+| NDA recall | 89/89 | 16/16 | 105/105 |
+| Field exact match | 1489/1490 (100%) | 279/292 (96%) | 1768/1782 (99%) |
+| Quote found in the text (non-null fields) | 1253/1253 | 242/242 | 1495/1495 |
+| NDA playbook result equals the manifest | 89/89 | 11/16 (69%) | 100/105 (95%) |
+| Sent to review | 77/207 (37%) | 34/41 (83%) | 111/248 (45%) |
+
+Review queue quality (test half, calibrated thresholds): of 111 documents sent to review, 94 had a
+real problem (an error, a true playbook deviation, or an out-of-scope type); of the 96 documents
+that need a human, 94 were caught. Counting only extraction errors, 11 of 13 were caught: too few
+errors to be conclusive. Cost: **$0.0043 per document on average** (NDA $0.0097, others $0.0003 to
+$0.0005), $2.04 for all 495.
+
+The 13 wrong scanned fields in the test half: 6 are the model copying damaged OCR text faithfully
+(e.g. "Fund VIl"), 7 are the model returning nothing. Digital pages: 1 wrong field in 1,490.
+
+### ContractNLI (real NDAs) (real NDAs, test split, CC BY 4.0).** Only two of our fields correspond to a
+ContractNLI hypothesis, and only as clause present vs absent: `return_destroy_days` ~ nda-16 and
+`non_solicit_months` ~ nda-18. The 66-document sample is **label-stratified** (all Entailment
+documents that fit, then NotMentioned), so **overall accuracy is not reported**. "Original" =
+the dataset's own PDF; "rendered" = the original was .txt/.htm, so the JSON text was rendered to a
+clean PDF (easier than real files).
+
+| Hypothesis, class | Measure | Original PDF | Rendered |
+|---|---|---|---|
+| nda-16 return/destroy, Entailment | field filled in | 4/24 | 1/13 |
+| nda-16, NotMentioned | field filled in (false alarm) | 1/8 | 2/20 |
+| nda-18 non-solicit, Entailment | field filled in | 4/5 | 16/23 |
+| nda-18, NotMentioned | field filled in (false alarm) | 0/27 | 0/11 |
+
+- **Small cells.** The 5 original-PDF non-solicit Entailment documents are all such documents in
+  the test split (the dataset's limit). The 8 original-PDF nda-16 NotMentioned documents are a
+  sample of 52 (our budget). Conclusions from cells this small are not safe.
+- ContractNLI cannot score the other eight NDA fields (counterparty, dates, term, governing law,
+  mutual, non-compete, residuals); the synthetic evaluation covers those. Cost: $0.0069 (original)
+  and $0.0094 (rendered) per document.
+
+![The review queue](docs/screenshots/review-queue.png)
+
+![A document with its cited quote highlighted](docs/screenshots/review-document.png)
+
+## What real data revealed
+
+The synthetic data is generated from templates, so it could not show these. They came from running
+66 real NDAs from the ContractNLI test split:
+
+1. **Schema flaw.** `return_destroy_days` conflates "no clause" with "clause without a deadline",
+   and `non_solicit_months` has the same problem. Real NDAs often have the second; the synthetic
+   data never did, so the synthetic evaluation could not show it. This is the main reason nda-16
+   recall is low. Future work: a separate `return_destroy` boolean, with the number of days optional.
+2. **Domain shift.** 20 of the 66 real NDAs were not classified confidently as NDAs (below the 0.8
+   threshold: 13 in the first run, 7 more among 9 documents whose first answer was cut off at a
+   400-token bound and that were re-run at 800), so they went to review before any field was
+   extracted. 2 more answered type `other` without a subtype. The threshold was deliberately **not
+   tuned on this test sample**. These documents count as misses for Entailment (22 of 66 got no
+   field answer).
+3. **The absent-clause keyword scan overfires on real NDAs.** Counting "flagged as mentioned" lifts
+   nda-16 recall to 9/24 (original) and 6/13 (rendered), but the scan also flags 11/20 rendered
+   NotMentioned documents. It costs reviewer time and lets nothing through.
+4. **No real NDA was auto-approved.** All 66 went to review: the system fails safe.
+
+## Quick start
+
+Needs [uv](https://docs.astral.sh/uv/), Node 22 and Docker Desktop.
+
+```bash
+git clone https://github.com/bhavishyabondalapati/lexintake.git && cd lexintake
+cp .env.example .env   # add ANTHROPIC_API_KEY, ANTHROPIC_MODEL_CLASSIFY, ANTHROPIC_MODEL_EXTRACT
+make install           # Python 3.12 environment (uv) and frontend packages
+make dev               # the whole stack in Docker Compose
+make seed-demo         # demo documents through the real parser, fake extractor: no API calls
+```
+
+Then open the review page at http://localhost:3000 (if a port is taken, see `.env` and the
+[Setup](#setup) notes). Tests: `make test` (fast), `make test-slow` (real Docling), `make lint`.
 
 ## The problem
 
@@ -49,11 +138,7 @@ flowchart LR
     API <--> DB
 ```
 
-Phase 0 builds the boxes that hold everything up: FastAPI, the Celery worker, Redis, Postgres
-with pgvector, and the Next.js app, all running together in Docker Compose. Phase 2 adds intake
-and parsing (below). Phase 3 adds classification, extraction and the citation checks
-([Classification & extraction](#classification--extraction-phase-3)). Phase 4 checks NDAs against
-the playbook ([Playbook check](#playbook-check-phase-4)). The minimal review page is Phase 6 ([Review page](#review-page-phase-6-minimal)); filing (Phase 5) is skipped for now.
+Filing and SharePoint storage (Phase 5) are not built yet; approved documents stay in the database.
 
 ### Ingestion and parsing (Phase 2)
 
@@ -265,15 +350,9 @@ lexintake/
 
 ## Setup
 
-You need [uv](https://docs.astral.sh/uv/), Node 22 and Docker Desktop.
-
-```bash
-git clone https://github.com/<your-username>/lexintake.git && cd lexintake
-cp .env.example .env          # then fill in ANTHROPIC_API_KEY, ANTHROPIC_MODEL_CLASSIFY, ANTHROPIC_MODEL_EXTRACT (Phase 3)
-make install                  # uv creates backend/.venv with Python 3.12; npm installs the frontend
-```
-
-uv downloads Python 3.12 itself if you don't have it, so you don't need conda or pyenv.
+The commands are in [Quick start](#quick-start). `make install` has uv download Python 3.12 itself,
+so you don't need conda or pyenv. `.env.example` lists every setting; `.env` is gitignored and only
+`.env` ever holds a real key.
 
 ## How to run
 
@@ -596,11 +675,8 @@ target (e.g. try RapidOCR's medium model or Tesseract).
 
 ## Classification & extraction (Phase 3)
 
-> **Real-model accuracy and cost are still pending.** Everything below is built and tested with a
-> fake extractor, but the first real run (20 documents, `make extract-preview MAX_SPEND=1.00`)
-> hasn't been done yet. [docs/phase3-dry-run.md](docs/phase3-dry-run.md) shows the whole pipeline
-> on those 20 documents with the fake extractor: it proves the checks and routing work, not how
-> accurate a real model is.
+> Phase 3 was built and tested with a fake extractor first ([docs/phase3-dry-run.md](docs/phase3-dry-run.md)
+> shows the pipeline with it). Real-model results are in [Results](#results).
 
 ### What happens to a parsed document
 
@@ -661,20 +737,6 @@ the document approved.
   (`app/extraction/pricing.py`). A model without a price refuses to run.
 - Retries: the SDK retries rate limits and server errors with backoff. The extract worker then
   retries up to 3 more times with longer waits before marking the document `failed`.
-
-### Running the real preview (later)
-
-```bash
-# .env: ANTHROPIC_API_KEY, ANTHROPIC_MODEL_CLASSIFY, ANTHROPIC_MODEL_EXTRACT
-make dev
-PYTHONPATH=backend uv run --project backend python -m scripts.extract_preview --dry-run  # free
-make extract-preview MAX_SPEND=1.00                                                         # paid
-```
-
-The report (`data/reports/extract_preview.md`) shows classification accuracy, NDA recall,
-per-field exact match, span verification, review reasons, absent-clause flags, cache use and cost
-per document per model, all split digital vs scanned. The dry run estimates the worst case at
-$0.80 for the 20 documents; real calls use far fewer output tokens than the maximum.
 
 ## Playbook check (Phase 4)
 
@@ -763,94 +825,24 @@ the queue, open a `needs_review` NDA, see the `no residuals` deviation, approve 
 the Docker Compose job. (`E2E_CHROME=1 E2E_BASE_URL=http://localhost:3105` uses your installed
 Chrome and a different port.)
 
-## Evaluation results
+## Evaluation: how to reproduce
 
-**Phase 3/4 preview (20 synthetic documents, real models, `make extract-preview`).** A small
-sample, not a benchmark. Full report: `data/reports/extract_preview.md` (not committed).
-
-| | Digital | Scanned | All |
-|---|---|---|---|
-| Document type correct | 14/14 | 6/6 | 20/20 |
-| Field exact match | 103/104 | 41/41 | 144/145 |
-| NDA playbook result equals the manifest | 6/6 | 2/2 | 8/8 |
-
-The one wrong field is a newsletter's publisher name. 12 of 20 documents went to review: 3 out of
-scope, 1 suspected prompt injection, 4 real playbook deviations, and the rest because the model's
-confidence on a field was below the threshold even though the answer was right. Cost: $0.0078 per
-document on average ($0.019 per NDA with Sonnet, $0.0003 for the others with Haiku).
+Results are in [Results](#results) above; the full reports are in
+[`docs/eval-results.md`](docs/eval-results.md) (synthetic: [`docs/eval-synthetic.md`](docs/eval-synthetic.md),
+ContractNLI: [`docs/eval-contractnli.md`](docs/eval-contractnli.md)).
 
 **Results vary a little between runs.** The current Claude models don't accept `temperature`
 (the SDK has no such argument), so a rerun can answer differently. The same 20 documents run twice
 (live, then through the Batch API) gave identical results for 16 documents and differed on 4: an
 extra value-not-in-quote review, an OCR spacing slip in a name, and two low-confidence flags. So the
-evaluation below is a **single run**, and small differences between percentages are noise.
+evaluation is a **single run**, and small differences between percentages are noise.
 
-### Phase 7: full evaluation (details in [`docs/eval-results.md`](docs/eval-results.md))
-
-Single runs through the Anthropic Batch API (half price): `python -m app.cli extract --batch DIR`.
-Real models (Haiku for classification and small field sets, Sonnet for NDA fields). The models
-take no `temperature`, so a rerun varies a little. **Two different datasets, not comparable:**
-
-**A. Synthetic (500 generated documents, 495 unique; ground truth is the manifest).** Numbers are
-from the **test half** (248 documents). The confidence thresholds were chosen on a separate
-calibration half, by fixed seed.
-
-| | Digital | Scanned | All |
-|---|---|---|---|
-| Document type correct | 207/207 | 41/41 | 248/248 |
-| NDA recall | 89/89 | 16/16 | 105/105 |
-| Field exact match | 1489/1490 (100%) | 279/292 (96%) | 1768/1782 (99%) |
-| Quote found in the text (non-null fields) | 1253/1253 | 242/242 | 1495/1495 |
-| NDA playbook result equals the manifest | 89/89 | 11/16 (69%) | 100/105 (95%) |
-| Sent to review | 77/207 (37%) | 34/41 (83%) | 111/248 (45%) |
-
-Review queue quality (test half, calibrated thresholds): of 111 documents sent to review, 94 had a
-real problem (an error, a true playbook deviation, or an out-of-scope type); of the 96 documents
-that need a human, 94 were caught. Counting only extraction errors, 11 of 13 were caught: too few
-errors to be conclusive. Cost: **$0.0043 per document on average** (NDA $0.0097, others $0.0003 to
-$0.0005), $2.04 for all 495.
-
-The 13 wrong scanned fields in the test half: 6 are the model copying damaged OCR text faithfully
-(e.g. "Fund VIl"), 7 are the model returning nothing. Digital pages: 1 wrong field in 1,490.
-
-**B. ContractNLI (real NDAs, test split, CC BY 4.0).** Only two of our fields correspond to a
-ContractNLI hypothesis, and only as clause present vs absent: `return_destroy_days` ~ nda-16 and
-`non_solicit_months` ~ nda-18. The 66-document sample is **label-stratified** (all Entailment
-documents that fit, then NotMentioned), so **overall accuracy is not reported**. "Original" =
-the dataset's own PDF; "rendered" = the original was .txt/.htm, so the JSON text was rendered to a
-clean PDF (easier than real files).
-
-| Hypothesis, class | Measure | Original PDF | Rendered |
-|---|---|---|---|
-| nda-16 return/destroy, Entailment | field filled in | 4/24 | 1/13 |
-| nda-16, NotMentioned | field filled in (false alarm) | 1/8 | 2/20 |
-| nda-18 non-solicit, Entailment | field filled in | 4/5 | 16/23 |
-| nda-18, NotMentioned | field filled in (false alarm) | 0/27 | 0/11 |
-
-**Main findings from the real data:**
-1. **Schema flaw.** `return_destroy_days` conflates "no clause" with "clause without a deadline",
-   and `non_solicit_months` has the same problem. Real NDAs often have the second; the synthetic
-   data never did, so the synthetic evaluation could not show it. This is the main reason nda-16
-   recall is low. Future work: a separate `return_destroy` boolean, with the number of days optional.
-2. **Domain shift.** 20 of the 66 real NDAs were not classified confidently as NDAs (below the 0.8
-   threshold: 13 in the first run, 7 more among 9 documents whose first answer was cut off at a
-   400-token bound and that were re-run at 800), so they went to review before any field was
-   extracted. 2 more answered type `other` without a subtype. The threshold was deliberately **not
-   tuned on this test sample**. These documents count as misses for Entailment (22 of 66 got no
-   field answer).
-3. **The absent-clause keyword scan overfires on real NDAs.** Counting "flagged as mentioned" lifts
-   nda-16 recall to 9/24 (original) and 6/13 (rendered), but the scan also flags 11/20 rendered
-   NotMentioned documents. It costs reviewer time and lets nothing through.
-4. **No real NDA was auto-approved.** All 66 went to review: the system fails safe.
-
-Also:
-- **Small cells.** The 5 original-PDF non-solicit Entailment documents are all such documents in
-  the test split (the dataset's limit). The 8 original-PDF nda-16 NotMentioned documents are a
-  sample of 52 (our budget). Conclusions from cells this small are not safe.
-- ContractNLI cannot score the other eight NDA fields (counterparty, dates, term, governing law,
-  mutual, non-compete, residuals); the synthetic evaluation covers those. Cost: $0.0069 (original)
-  and $0.0094 (rendered) per document.
-
+Both evaluations use the Anthropic Batch API (half price): `python -m app.cli extract --batch DIR`.
+It sends one classify batch and one extract batch, keeps the answers and batch ids in `DIR` (a
+stopped run resumes without paying twice), checks the spend cap against a true worst case before
+sending anything, and then runs the normal checks and routing. `make eval-synthetic RUN=<id>` and
+`make eval-contractnli` rebuild the reports from the database for free. The 500 synthetic documents
+cost $2.04; the 66 ContractNLI documents cost $0.54.
 
 ## How it was built
 
@@ -890,7 +882,17 @@ Also:
    and the `extractor` service. Building a prompt-injection test NDA showed that a planted value
    gets a *real* quote, so I added the injection check. Rebuilding the worker image showed the OCR
    model host returning error pages saved as model files, so the build now checks the models.
-   Last, the preview script and a fake-extractor dry run on 20 documents. The real run is pending.
+   Last, the preview script and a fake-extractor dry run on 20 documents, then the real run.
+5. **Phase 4, playbook.** The rules live in YAML; one checker returns pass, deviation or unknown
+   with evidence, and an unknown can never auto-approve. A ground-truth test checks it against
+   all 500 synthetic manifests.
+6. **Phase 6, review page** (Phase 5, filing, skipped). Review endpoints, a Next.js queue and
+   document view with highlighted quotes (pdf.js text search for digital pages, stored OCR boxes
+   for scans), and a Playwright test.
+7. **Phase 7, evaluation.** Batch mode (half price, resumable, spend-capped), a 500-document
+   synthetic run with thresholds calibrated on one half and reported on the other, and a
+   label-stratified ContractNLI run on real NDAs. Real data exposed the schema flaw, the domain
+   shift and the keyword-scan overfire (see What real data revealed).
 
 ## Key concepts
 
@@ -1023,12 +1025,6 @@ Also:
 - **Port clashes.** If something else on your machine already uses 3000/8000 (or 5432/6379),
   `docker compose up` fails with "port is already allocated". Set the `*_PORT` variables in
   `.env` (see the "How to run" section).
-- **ContractNLI is text, not PDFs (next step for Phase 7).** The labels and evidence spans in
-  `train/dev/test.json` are character offsets into each NDA's plain `text`. The zip also ships
-  originals in `raw/` (375 PDFs plus 113 .htm and 119 .txt files), but their layout doesn't match those
-  offsets. So Phase 7 will need to either render the JSON text to PDF, reusing
-  `scripts/synth/render.py` so the offsets still line up, or let the pipeline accept text input
-  directly. This isn't built yet.
 - **A writer that pauses mid-file can fool the watcher.** A file is picked up after it hasn't
   changed for ~2 seconds. If something writes half a file, pauses longer than that, then finishes,
   the watcher takes the half file (which then fails parsing with a clear error). Real copies,
@@ -1048,16 +1044,6 @@ Also:
 - **Intermediate commit.** In this phase's history, the upload commit imports a constant from
   `app/worker.py` that only arrives two commits later. The branch tip is fine; bisecting across
   those two commits would hit an import error.
-- **Phase 3: the real 20-document preview hasn't been run.** Everything is tested with a fake
-  extractor (see [docs/phase3-dry-run.md](docs/phase3-dry-run.md)), so real-model accuracy and
-  cost are unknown. Next step: `make extract-preview MAX_SPEND=1.00` (worst case $0.80).
-- **Phase 3: replay fixtures from real responses still to be recorded.** After the real run,
-  `scripts.extract_preview --report-only --record` saves about six real responses plus their
-  parsed text to `backend/tests/fixtures/llm/`, so tests can replay real model output without
-  calling the API. Until then, the tests use only the fake extractor and a stub client.
-- **Phase 3 option: a free local-model Extractor.** A local model (for example one served by
-  Ollama) could sit behind the same `Extractor` interface (`call(plan, doc) -> LlmResult`) for
-  development runs that cost nothing. Not built; its accuracy would need the same preview report.
 - **Phase 3: the daily spend cap is per worker check.** With several extract workers running at
   once, each checks the day's total before its own call, so together they can go a little over
   the cap. `make extract` (one process) can't.
@@ -1065,6 +1051,22 @@ Also:
   fire on none of the synthetic non-NDAs, but real contracts phrase things in more ways, so expect
   more review flags (and some misses) on real documents.
 
+## Future work
+
+- Split `return_destroy_days` and `non_solicit_months` into a presence boolean plus optional days
+  (finding 1).
+- Flag damaged-looking OCR text (lost spaces, `I` for `l`, dropped punctuation in names) and send
+  those documents to review (the two confident OCR escapes under Known issues).
+- Re-tune the NDA classifier on a held-out set of real NDAs (finding 2), and make the absent-clause
+  scan understand clause wording instead of keywords (finding 3).
+- Phase 5: filing through a `StorageAdapter` (local folders, SharePoint through Microsoft Graph), and
+  a login for the review page (today every action is recorded as the actor `reviewer`).
+- A free local-model `Extractor` (for example through Ollama) behind the same interface, for
+  development runs that cost nothing.
+- Run the OCR pass only on the scanned pages of mixed documents.
+
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Code: MIT, see [LICENSE](LICENSE). Data: **ContractNLI** is CC BY 4.0 (Hitachi America, Ltd.) and
+**CUAD** is CC BY 4.0 (The Atticus Project); they are downloaded by `make data`, never committed.
+The synthetic documents are generated by `make synthetic` and are not real.
