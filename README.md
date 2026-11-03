@@ -8,6 +8,10 @@ NDAs against the legal team's playbook (pass, deviation or unknown, with evidenc
 anything doubtful to a human review page. When it is unsure it sends the document to a person; it
 never guesses. Built with FastAPI, Postgres, Celery, Docling, the Anthropic API and Next.js.
 
+![LexIntake demo](docs/demo.gif)
+
+[Full demo video (80 s)](https://github.com/bhavishyabondalapati/lexintake/releases/download/v1.0/lexintake-demo.mp4)
+
 > Independent portfolio project, not affiliated with any firm. It uses only public and synthetic
 > data.
 
